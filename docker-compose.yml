@@ -1,0 +1,33 @@
+version: "3.8"
+
+services:
+  backend-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: feedback-backend-dev
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app
+      - static_volume:/app/static
+      - media_volume:/app/media
+    environment:
+      - DJANGO_SETTINGS_MODULE=feedback.settings
+      - DEBUG=True
+      - PYTHONPATH=/app
+    env_file:
+      - .env
+    stdin_open: true
+    tty: true
+    restart: unless-stopped
+    networks:
+      - feedback-network
+
+volumes:
+  static_volume:
+  media_volume:
+
+networks:
+  feedback-network:
+    driver: bridge
