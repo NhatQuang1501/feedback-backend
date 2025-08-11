@@ -39,7 +39,16 @@ def send_otp_email_task(email, full_name, otp, expiry_minutes):
         "Đội ngũ quản lý FeedbackHub"
     )
 
-    return send_email_task.delay(email, subject, body)
+    try:
+        message = EmailMultiAlternatives(
+            subject=subject, body=body, from_email=settings.EMAIL_HOST_USER, to=[email]
+        )
+        message.send()
+        logger.info(f"OTP email sent successfully to {email}")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to send OTP email to {email}: {str(e)}")
+        return False
 
 
 # @shared_task

@@ -66,8 +66,23 @@ def delete_token_from_cache(email):
 
 
 def get_tokens_for_user(user):
-    refresh = RefreshToken.for_user(user)
+    """
+    Tạo JWT tokens cho user. Nếu user chưa active, chỉ tạo token cho việc xác thực email.
+    """
+    from rest_framework_simplejwt.tokens import Token
 
+    class VerificationToken(Token):
+        token_type = "verification"
+        lifetime = timedelta(minutes=5)
+
+    if not user.is_active:
+        token = VerificationToken()
+        token.payload["user_id"] = str(user.user_id)
+        token.payload["email"] = user.email
+        token.payload["type"] = "verification"
+        return {"verification_token": str(token)}
+
+    refresh = RefreshToken.for_user(user)
     refresh["role"] = user.role.name
     refresh.access_token["role"] = user.role.name
     refresh.access_token["full_name"] = user.full_name
@@ -116,26 +131,36 @@ def handle_auth_response(serializer_class):
         def wrapper(request, *args, **kwargs):
             serializer = serializer_class(data=request.data)
             if serializer.is_valid():
-                user = (
-                    serializer.save()
-                    if hasattr(serializer, "save")
-                    else serializer.validated_data["user"]
-                )
+                # Lấy user từ serializer
+                if hasattr(serializer, "create") and "register" in view_func.__name__:
+                    user = serializer.save()
+                else:
+                    user = serializer.validated_data["user"]
 
                 tokens = get_tokens_for_user(user)
+                response_data = {"user": UserSerializer(user).data}
+                response_data.update(tokens)
 
-                return Response(
-                    {
-                        "refresh": tokens["refresh"],
-                        "access": tokens["access"],
-                        "user": UserSerializer(user).data,
-                    },
-                    status=(
-                        status.HTTP_201_CREATED
-                        if "register" in view_func.__name__
-                        else status.HTTP_200_OK
-                    ),
-                )
+                # Nếu là đăng ký mới, tự động gửi OTP
+                if "register" in view_func.__name__:
+                    create_and_send_otp(user)
+                    response_data["message"] = (
+                        "Vui lòng kiểm tra email để xác thực tài khoản"
+                    )
+                    return Response(response_data, status=status.HTTP_201_CREATED)
+
+                # Nếu là đăng nhập và user chưa active
+                if not user.is_active and "login" in view_func.__name__:
+                    return Response(
+                        {
+                            "error": "Tài khoản chưa được kích hoạt. Vui lòng xác thực email.",
+                            "verification_token": tokens.get("verification_token"),
+                        },
+                        status=status.HTTP_403_FORBIDDEN,
+                    )
+
+                return Response(response_data, status=status.HTTP_200_OK)
+
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
         return wrapper
