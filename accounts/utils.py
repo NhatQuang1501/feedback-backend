@@ -1,0 +1,202 @@
+from datetime import timedelta
+from functools import wraps
+import logging
+import random
+import string
+import uuid
+from django.core.cache import cache
+from django.conf import settings
+from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken
+from rest_framework.pagination import PageNumberPagination
+from rest_framework.response import Response
+from rest_framework import status
+from .serializers import UserSerializer
+from .tasks import send_otp_email_task
+
+logger = logging.getLogger(__name__)
+
+OTP_LENGTH = 6
+EMAIL_SUPPORT = "feedbackhub2025@gmail.com"
+HOTLINE = "0123 456 789"
+
+
+def generate_otp():
+    return "".join(random.choices(string.digits, k=OTP_LENGTH))
+
+
+def generate_token():
+    return str(uuid.uuid4())
+
+
+def _get_cache_key(email, prefix="otp"):
+    return f"{prefix}_{email.lower()}"
+
+
+def store_otp_in_cache(email, otp):
+    cache_key = _get_cache_key(email)
+    cache.set(cache_key, otp, timeout=settings.OTP_EXPIRY_TIME)
+
+
+def get_otp_from_cache(email):
+    cache_key = _get_cache_key(email)
+    return cache.get(cache_key)
+
+
+def delete_otp_from_cache(email):
+    cache_key = _get_cache_key(email)
+    cache.delete(cache_key)
+
+
+def store_token_in_cache(email, token, timeout=None):
+    if timeout is None:
+        timeout = settings.OTP_EXPIRY_TIME
+    cache_key = _get_cache_key(email, prefix="token")
+    cache.set(cache_key, token, timeout=timeout)
+
+
+def get_token_from_cache(email):
+    cache_key = _get_cache_key(email, prefix="token")
+    return cache.get(cache_key)
+
+
+def delete_token_from_cache(email):
+    cache_key = _get_cache_key(email, prefix="token")
+    cache.delete(cache_key)
+
+
+def get_tokens_for_user(user):
+    refresh = RefreshToken.for_user(user)
+
+    refresh["role"] = user.role.name
+    refresh.access_token["role"] = user.role.name
+    refresh.access_token["full_name"] = user.full_name
+
+    return {
+        "refresh": str(refresh),
+        "access": str(refresh.access_token),
+    }
+
+
+def create_and_send_otp(user):
+    """Tạo OTP, lưu vào cache và gửi email qua Celery"""
+    otp = generate_otp()
+    store_otp_in_cache(user.email, otp)
+
+    # Gửi email OTP qua Celery
+    send_otp_email_task.delay(
+        user.email, user.full_name, otp, settings.OTP_EXPIRY_TIME // 60
+    )
+
+    return otp
+
+
+def token_blacklisted(token):
+    try:
+        refresh_token = RefreshToken(token)
+        if BlacklistedToken.objects.filter(
+            token__jti=refresh_token.payload["jti"]
+        ).exists():
+            return True
+
+        refresh_token.blacklist()
+        return True
+    except Exception as e:
+        logger.error(f"Token blacklist error: {str(e)}")
+        return False
+
+
+def handle_auth_response(serializer_class):
+    """
+    Decorator để xử lý response cho các view authentication
+    """
+
+    def decorator(view_func):
+        @wraps(view_func)
+        def wrapper(request, *args, **kwargs):
+            serializer = serializer_class(data=request.data)
+            if serializer.is_valid():
+                user = (
+                    serializer.save()
+                    if hasattr(serializer, "save")
+                    else serializer.validated_data["user"]
+                )
+
+                tokens = get_tokens_for_user(user)
+
+                return Response(
+                    {
+                        "refresh": tokens["refresh"],
+                        "access": tokens["access"],
+                        "user": UserSerializer(user).data,
+                    },
+                    status=(
+                        status.HTTP_201_CREATED
+                        if "register" in view_func.__name__
+                        else status.HTTP_200_OK
+                    ),
+                )
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        return wrapper
+
+    return decorator
+
+
+# def handle_oauth_response(provider_name):
+#     """
+#     Decorator để xử lý response cho các view OAuth
+#     """
+
+#     def decorator(view_func):
+#         @wraps(view_func)
+#         def wrapper(request, *args, **kwargs):
+#             token = request.data.get("token")
+#             if not token:
+#                 return Response(
+#                     {"error": "Token không được cung cấp"},
+#                     status=status.HTTP_400_BAD_REQUEST,
+#                 )
+
+#             try:
+#                 # Gọi view function gốc để xử lý logic OAuth
+#                 user = view_func(request, token, *args, **kwargs)
+#                 if isinstance(
+#                     user, Response
+#                 ):  # Nếu view function trả về Response (lỗi)
+#                     return user
+
+#                 # Tạo token
+#                 tokens = get_tokens_for_user(user)
+
+#                 return Response(
+#                     {
+#                         "refresh": tokens["refresh"],
+#                         "access": tokens["access"],
+#                         "user": UserSerializer(user).data,
+#                     }
+#                 )
+#             except Exception as e:
+#                 return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+#         return wrapper
+#     return decorator
+
+
+class CustomPagination(PageNumberPagination):
+    page_size = 10
+    page_size_query_param = "page_size"
+    max_page_size = 50
+
+    def get_paginated_response(self, data):
+        return Response(
+            {
+                "count": self.page.paginator.count,
+                "next": self.get_next_link(),
+                "previous": self.get_previous_link(),
+                "current_page": self.page.number,
+                "total_pages": self.page.paginator.num_pages,
+                "data": data,
+            },
+            status=status.HTTP_200_OK,
+        )
