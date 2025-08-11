@@ -25,7 +25,7 @@ docker build -t feedback-backend-dev .
 docker compose down
 ```
 
-### Django Commands (trong container)
+### Django Commands (in container)
 ```bash
 # Django shell
 docker compose exec backend-dev python manage.py shell
@@ -46,5 +46,5 @@ docker compose logs -f backend-dev
 
 1. ✅ Copy `.env.example` to `.env`
 2. ✅ Update `.env` with your Supabase credentials
-3. ✅ Run `docker compose up backend-dev`
+3. ✅ Run `docker compose up`
 4. ✅ Access http://localhost:8000
