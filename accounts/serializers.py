@@ -59,7 +59,7 @@ class RegisterSerializer(serializers.ModelSerializer):
             password=validated_data["password"],
             full_name=validated_data["full_name"],
             role=role,
-            is_active=False,  # Thêm dòng này
+            is_active=False,
         )
         return user
 
