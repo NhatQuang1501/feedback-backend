@@ -236,7 +236,11 @@ EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD")
 
 OTP_EXPIRY_TIME = 300
 
-# # Social Authentication
+# Google OAuth settings
+GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "")
+GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", "")
+
+# # Social Authentication (Alternative approach - currently not used)
 # AUTHENTICATION_BACKENDS = (
 #     "social_core.backends.google.GoogleOAuth2",
 #     "social_core.backends.facebook.FacebookOAuth2",

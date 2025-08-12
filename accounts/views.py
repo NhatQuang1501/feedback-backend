@@ -21,6 +21,7 @@ from .utils import (
     delete_otp_from_cache,
     get_tokens_for_user,
 )
+from .google_auth import GoogleAuthService, GoogleAuthError
 
 
 @api_view(["POST"])
@@ -159,4 +160,56 @@ def verify_otp(request):
         return Response(
             {"error": "Không tìm thấy tài khoản với email này"},
             status=status.HTTP_404_NOT_FOUND,
+        )
+
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+def google_login(request):
+    """
+    Google OAuth login
+    
+    Expected payload:
+    {
+        "token": "google_id_token_from_frontend"
+    }
+    """
+    token = request.data.get("token")
+    
+    if not token:
+        return Response(
+            {"error": "Google token không được cung cấp"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    
+    try:
+        # Authenticate user with Google
+        user, created = GoogleAuthService.authenticate_google_user(token)
+        
+        # Generate JWT tokens
+        tokens = get_tokens_for_user(user)
+        
+        # Prepare response
+        response_data = {
+            "access": tokens["access"],
+            "refresh": tokens["refresh"],
+            "user": UserSerializer(user).data,
+        }
+        
+        if created:
+            response_data["message"] = "Tài khoản Google đã được tạo thành công"
+            return Response(response_data, status=status.HTTP_201_CREATED)
+        else:
+            response_data["message"] = "Đăng nhập Google thành công"
+            return Response(response_data, status=status.HTTP_200_OK)
+            
+    except GoogleAuthError as e:
+        return Response(
+            {"error": str(e)},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    except Exception as e:
+        return Response(
+            {"error": "Đã xảy ra lỗi trong quá trình xác thực Google"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )

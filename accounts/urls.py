@@ -7,6 +7,7 @@ from .views import (
     user_profile,
     send_verification_otp,
     verify_otp,
+    google_login,
 )
 
 urlpatterns = [
@@ -16,7 +17,7 @@ urlpatterns = [
     path("token/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
     path("logout/", logout, name="logout"),
     # OAuth endpoints
-    # path("login/google/", google_login, name="google_login"),
+    path("login/google/", google_login, name="google_login"),
     # User profile endpoints
     path("profile/", user_profile, name="user_profile"),
     # OTP verification endpoints
@@ -25,5 +26,5 @@ urlpatterns = [
         send_verification_otp,
         name="send_verification_otp",
     ),
-    path("verify-otp/", verify_otp, name="verify_otp"),
+    path("verify-otp/", verify_otp, name="verify_otp")
 ]
