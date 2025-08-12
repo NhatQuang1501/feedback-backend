@@ -36,6 +36,29 @@ services:
       redis:
         condition: service_healthy
 
+  celery-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: feedback-celery-worker
+    command: celery -A feedback worker --loglevel=info --pool=solo
+    volumes:
+      - .:/app
+    environment:
+      - DJANGO_SETTINGS_MODULE=feedback.settings
+      - DEBUG=True
+      - PYTHONPATH=/app
+    env_file:
+      - .env
+    restart: unless-stopped
+    networks:
+      - feedback-network
+    depends_on:
+      redis:
+        condition: service_healthy
+      backend-dev:
+        condition: service_started
+
 volumes:
   static_volume:
   media_volume:

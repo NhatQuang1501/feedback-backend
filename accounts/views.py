@@ -1,30 +1,162 @@
-from django.http import JsonResponse
-from django.core.cache import cache
-from redis import Redis
-import os
+from rest_framework import status
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated, AllowAny
+
+from .models import User
+from .models import User, Role
+from .serializers import (
+    LoginSerializer,
+    UserSerializer,
+    RegisterSerializer,
+    ProfileUpdateSerializer,
+)
+from .permissions import IsAdmin, IsUser, IsSelf, IsAdminOrSelf, IsAdminOrReadOnly
+from .utils import (
+    handle_auth_response,
+    # handle_oauth_response,
+    token_blacklisted,
+    create_and_send_otp,
+    get_otp_from_cache,
+    delete_otp_from_cache,
+    get_tokens_for_user,
+)
 
 
-def check_redis(request):
-    cache_status = False
-    redis_status = False
+@api_view(["POST"])
+@permission_classes([AllowAny])
+@handle_auth_response(RegisterSerializer)
+def register(request):
+    pass
 
-    # Kiểm tra Django cache (sử dụng Redis)
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+@handle_auth_response(LoginSerializer)
+def login(request):
+    pass
+
+
+@api_view(["GET", "PATCH"])
+@permission_classes([IsAuthenticated])
+def user_profile(request):
+    """Xem và cập nhật profile"""
+    user = request.user
+
+    if request.method == "GET":
+        serializer = UserSerializer(user)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    elif request.method == "PATCH":
+        serializer = ProfileUpdateSerializer(user, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(UserSerializer(user).data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+# @api_view(["POST"])
+# @permission_classes([IsAuthenticated])
+# def change_password(request):
+#     """Thay đổi mật khẩu"""
+#     serializer = ChangePasswordSerializer(data=request.data)
+#     if serializer.is_valid():
+#         user = request.user
+#         if not user.check_password(serializer.validated_data["old_password"]):
+#             return Response(
+#                 {"old_password": ["Mật khẩu hiện tại không đúng"]},
+#                 status=status.HTTP_400_BAD_REQUEST,
+#             )
+
+#         user.set_password(serializer.validated_data["new_password"])
+#         user.save()
+#         return Response({"message": "Mật khẩu đã được thay đổi thành công"})
+
+#     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def logout(request):
     try:
-        cache.set("test_cache", "working", 10)
-        if cache.get("test_cache") == "working":
-            cache_status = True
+        refresh_token = request.data.get("refresh")
+        if refresh_token:
+            token_blacklisted(refresh_token)
+        return Response({"message": "Đăng xuất thành công"}, status=status.HTTP_200_OK)
     except Exception as e:
-        cache_error = str(e)
+        return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
-    # Kiểm tra kết nối Redis trực tiếp
-    try:
-        r = Redis(
-            host=os.environ.get("REDIS_HOST", "redis"),
-            port=int(os.environ.get("REDIS_PORT", 6379)),
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+def send_verification_otp(request):
+    """Gửi OTP xác thực qua email"""
+    email = request.data.get("email")
+    if not email:
+        return Response(
+            {"error": "Email không được cung cấp"},
+            status=status.HTTP_400_BAD_REQUEST,
         )
-        if r.ping():
-            redis_status = True
-    except Exception as e:
-        redis_error = str(e)
 
-    return JsonResponse({"cache_status": cache_status, "redis_status": redis_status})
+    try:
+        user = User.objects.get(email=email)
+        create_and_send_otp(user)
+        return Response({"message": "Mã OTP đã được gửi đến email của bạn"})
+    except User.DoesNotExist:
+        return Response(
+            {"error": "Không tìm thấy tài khoản với email này"},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+def verify_otp(request):
+    """Xác thực OTP"""
+    email = request.data.get("email")
+    otp = request.data.get("otp")
+
+    if not email or not otp:
+        return Response(
+            {"error": "Email và OTP không được để trống"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    try:
+        user = User.objects.get(email=email)
+        stored_otp = get_otp_from_cache(email)
+
+        if not stored_otp:
+            return Response(
+                {"error": "Mã OTP đã hết hạn"}, status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if otp != stored_otp:
+            return Response(
+                {"error": "Mã OTP không chính xác"}, status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Kích hoạt tài khoản
+        user.is_active = True
+        user.save()
+
+        # Xóa OTP khỏi cache
+        delete_otp_from_cache(email)
+
+        # Tạo token cho user
+        tokens = get_tokens_for_user(user)
+
+        return Response(
+            {
+                "message": "Xác thực thành công",
+                "refresh": tokens["refresh"],
+                "access": tokens["access"],
+                "user": UserSerializer(user).data,
+            }
+        )
+
+    except User.DoesNotExist:
+        return Response(
+            {"error": "Không tìm thấy tài khoản với email này"},
+            status=status.HTTP_404_NOT_FOUND,
+        )
