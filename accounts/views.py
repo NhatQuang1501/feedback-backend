@@ -11,7 +11,7 @@ from .serializers import (
     RegisterSerializer,
     ProfileUpdateSerializer,
 )
-from .permissions import IsAdmin, IsUser, IsSelf, IsAdminOrSelf, IsAdminOrReadOnly
+from .permissions import IsAdmin, IsUser
 from .utils import (
     handle_auth_response,
     # handle_oauth_response,
@@ -160,3 +160,36 @@ def verify_otp(request):
             {"error": "Không tìm thấy tài khoản với email này"},
             status=status.HTTP_404_NOT_FOUND,
         )
+
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+def register_admin(request):
+    """Đăng ký tài khoản admin"""
+    serializer = RegisterSerializer(data=request.data)
+    if serializer.is_valid():
+        validated_data = serializer.validated_data.copy()
+        validated_data.pop("password2")
+        admin_role = Role.objects.get(name="admin")
+        user = User.objects.create_user(
+            email=validated_data["email"],
+            password=validated_data["password"],
+            full_name=validated_data["full_name"],
+            role=admin_role,
+            is_staff=True,
+            is_active=False,
+        )
+
+        create_and_send_otp(user)
+        tokens = get_tokens_for_user(user)
+
+        return Response(
+            {
+                "message": "Đăng ký admin thành công. Vui lòng kiểm tra email để xác thực tài khoản",
+                "user": UserSerializer(user).data,
+                "verification_token": tokens.get("verification_token"),
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

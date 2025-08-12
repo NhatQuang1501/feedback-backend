@@ -47,6 +47,7 @@ INSTALLED_APPS = [
     "rest_framework_simplejwt.token_blacklist",
     "corsheaders",
     "drf_yasg",
+    "feedbacks",
     "django_filters",
     "accounts",
     # "social_django",
@@ -235,6 +236,10 @@ EMAIL_HOST_USER = os.environ.get("EMAIL_HOST_USER")
 EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD")
 
 OTP_EXPIRY_TIME = 300
+
+# Frontend URLs for email links
+FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:3000")
+ADMIN_URL = os.environ.get("ADMIN_URL", "http://localhost:3000/admin")
 
 # # Social Authentication
 # AUTHENTICATION_BACKENDS = (

@@ -5,10 +5,10 @@
 ### Development Mode
 ```bash
 # Start backend development server
-docker compose up backend-dev
+docker compose up
 
 # Access: http://localhost:8000
-# Admin: http://localhost:8000/admin (admin/admin123)
+# Admin: http://localhost:8000/admin
 ```
 
 ## 🛠️ Available Commands
@@ -16,7 +16,7 @@ docker compose up backend-dev
 ### Docker Commands
 ```bash
 # Development
-docker compose up backend-dev
+docker compose up
 
 # Build image
 docker build -t feedback-backend-dev .
