@@ -7,7 +7,7 @@ from .models import User, Role
 class RoleSerializer(serializers.ModelSerializer):
     class Meta:
         model = Role
-        fields = ["role_id", "name", "description"]
+        fields = ["role_id", "name"]
         read_only_fields = ["role_id"]
 
 

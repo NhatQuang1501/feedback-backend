@@ -47,6 +47,7 @@ INSTALLED_APPS = [
     "rest_framework_simplejwt.token_blacklist",
     "corsheaders",
     "drf_yasg",
+    "feedbacks",
     "django_filters",
     "accounts",
     # "social_django",
@@ -236,11 +237,15 @@ EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD")
 
 OTP_EXPIRY_TIME = 300
 
+# Frontend URLs for email links
+FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:3000")
+ADMIN_URL = os.environ.get("ADMIN_URL", "http://127.0.0.1:8000/admin")
+
 # Google OAuth settings
 GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "")
 GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", "")
 
-# # Social Authentication (Alternative approach - currently not used)
+# # Social Authentication (Alternative approach)
 # AUTHENTICATION_BACKENDS = (
 #     "social_core.backends.google.GoogleOAuth2",
 #     "social_core.backends.facebook.FacebookOAuth2",

@@ -4,6 +4,7 @@ from .views import (
     register,
     login,
     logout,
+    register_admin,
     user_profile,
     send_verification_otp,
     verify_otp,
@@ -26,5 +27,6 @@ urlpatterns = [
         send_verification_otp,
         name="send_verification_otp",
     ),
-    path("verify-otp/", verify_otp, name="verify_otp")
+    path("verify-otp/", verify_otp, name="verify_otp"),
+    path("register/admin/", register_admin, name="register_admin"),
 ]

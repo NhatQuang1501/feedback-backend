@@ -6,9 +6,8 @@ import string
 import uuid
 from django.core.cache import cache
 from django.conf import settings
-from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.tokens import RefreshToken, Token
 from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken
-from rest_framework.pagination import PageNumberPagination
 from rest_framework.response import Response
 from rest_framework import status
 from .serializers import UserSerializer
@@ -66,10 +65,6 @@ def delete_token_from_cache(email):
 
 
 def get_tokens_for_user(user):
-    """
-    Tạo JWT tokens cho user. Nếu user chưa active, chỉ tạo token cho việc xác thực email.
-    """
-    from rest_framework_simplejwt.tokens import Token
 
     class VerificationToken(Token):
         token_type = "verification"
@@ -88,13 +83,12 @@ def get_tokens_for_user(user):
     refresh.access_token["full_name"] = user.full_name
 
     return {
-        "refresh": str(refresh),
         "access": str(refresh.access_token),
+        "refresh": str(refresh),
     }
 
 
 def create_and_send_otp(user):
-    """Tạo OTP, lưu vào cache và gửi email qua Celery"""
     otp = generate_otp()
     store_otp_in_cache(user.email, otp)
 
@@ -141,7 +135,6 @@ def handle_auth_response(serializer_class):
                 response_data = {"user": UserSerializer(user).data}
                 response_data.update(tokens)
 
-                # Nếu là đăng ký mới, tự động gửi OTP
                 if "register" in view_func.__name__:
                     create_and_send_otp(user)
                     response_data["message"] = (
@@ -149,7 +142,6 @@ def handle_auth_response(serializer_class):
                     )
                     return Response(response_data, status=status.HTTP_201_CREATED)
 
-                # Nếu là đăng nhập và user chưa active
                 if not user.is_active and "login" in view_func.__name__:
                     return Response(
                         {
@@ -184,14 +176,12 @@ def handle_auth_response(serializer_class):
 #                 )
 
 #             try:
-#                 # Gọi view function gốc để xử lý logic OAuth
 #                 user = view_func(request, token, *args, **kwargs)
 #                 if isinstance(
 #                     user, Response
-#                 ):  # Nếu view function trả về Response (lỗi)
+#                 ):
 #                     return user
 
-#                 # Tạo token
 #                 tokens = get_tokens_for_user(user)
 
 #                 return Response(
@@ -206,22 +196,3 @@ def handle_auth_response(serializer_class):
 
 #         return wrapper
 #     return decorator
-
-
-class CustomPagination(PageNumberPagination):
-    page_size = 10
-    page_size_query_param = "page_size"
-    max_page_size = 50
-
-    def get_paginated_response(self, data):
-        return Response(
-            {
-                "count": self.page.paginator.count,
-                "next": self.get_next_link(),
-                "previous": self.get_previous_link(),
-                "current_page": self.page.number,
-                "total_pages": self.page.paginator.num_pages,
-                "data": data,
-            },
-            status=status.HTTP_200_OK,
-        )

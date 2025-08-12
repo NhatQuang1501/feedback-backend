@@ -168,41 +168,41 @@ def verify_otp(request):
 def google_login(request):
     """
     Google OAuth login
-    
+
     Expected payload:
     {
         "token": "google_id_token_from_frontend"
     }
     """
     token = request.data.get("token")
-    
+
     if not token:
         return Response(
             {"error": "Google token không được cung cấp"},
             status=status.HTTP_400_BAD_REQUEST,
         )
-    
+
     try:
         # Authenticate user with Google
         user, created = GoogleAuthService.authenticate_google_user(token)
-        
+
         # Generate JWT tokens
         tokens = get_tokens_for_user(user)
-        
+
         # Prepare response
         response_data = {
             "access": tokens["access"],
             "refresh": tokens["refresh"],
             "user": UserSerializer(user).data,
         }
-        
+
         if created:
             response_data["message"] = "Tài khoản Google đã được tạo thành công"
             return Response(response_data, status=status.HTTP_201_CREATED)
         else:
             response_data["message"] = "Đăng nhập Google thành công"
             return Response(response_data, status=status.HTTP_200_OK)
-            
+
     except GoogleAuthError as e:
         return Response(
             {"error": str(e)},
@@ -213,3 +213,36 @@ def google_login(request):
             {"error": "Đã xảy ra lỗi trong quá trình xác thực Google"},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
+
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+def register_admin(request):
+    """Đăng ký tài khoản admin"""
+    serializer = RegisterSerializer(data=request.data)
+    if serializer.is_valid():
+        validated_data = serializer.validated_data.copy()
+        validated_data.pop("password2")
+        admin_role = Role.objects.get(name="admin")
+        user = User.objects.create_user(
+            email=validated_data["email"],
+            password=validated_data["password"],
+            full_name=validated_data["full_name"],
+            role=admin_role,
+            is_staff=True,
+            is_active=False,
+        )
+
+        create_and_send_otp(user)
+        tokens = get_tokens_for_user(user)
+
+        return Response(
+            {
+                "message": "Đăng ký admin thành công. Vui lòng kiểm tra email để xác thực tài khoản",
+                "user": UserSerializer(user).data,
+                "verification_token": tokens.get("verification_token"),
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
