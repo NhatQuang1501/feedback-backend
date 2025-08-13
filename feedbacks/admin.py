@@ -74,6 +74,7 @@ class AttachmentAdmin(admin.ModelAdmin):
         "attachment_id",
         "feedback",
         "file_name",
+        "file_url",
         "file_type",
         "uploaded_at",
     )

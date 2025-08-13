@@ -1,17 +1,17 @@
 from django.shortcuts import get_object_or_404
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view, permission_classes, parser_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import status
-from .models import Feedback, Attachment
+from rest_framework.parsers import MultiPartParser, FormParser
+from .models import Feedback
 from .serializers import (
     FeedbackListSerializer,
     FeedbackDetailSerializer,
     FeedbackCreateSerializer,
     FeedbackUpdateStatusSerializer,
-    AttachmentSerializer,
 )
-from .utils import CustomPagination, handle_feedback_response, notify_status_change
+from .utils import CustomPagination, send_feedback_emails, notify_status_change
 from accounts.permissions import IsUser, IsAdmin, IsOwnerOrAdmin
 
 
@@ -20,7 +20,6 @@ from accounts.permissions import IsUser, IsAdmin, IsOwnerOrAdmin
 def get_feedback_list(request):
     paginator = CustomPagination()
 
-    # Basic filter
     status_filter = request.query_params.get("status")
     type_filter = request.query_params.get("type")
     priority_filter = request.query_params.get("priority")
@@ -30,7 +29,6 @@ def get_feedback_list(request):
     else:
         queryset = Feedback.objects.filter(user=request.user)
 
-    # Apply filters
     if status_filter:
         queryset = queryset.filter(status__name=status_filter)
     if type_filter:
@@ -41,7 +39,7 @@ def get_feedback_list(request):
     queryset = queryset.order_by("-created_at")
 
     page = paginator.paginate_queryset(queryset, request)
-    serializer = FeedbackListSerializer(page, many=True)
+    serializer = FeedbackListSerializer(page, many=True, context={"request": request})
 
     return paginator.get_paginated_response(serializer.data)
 
@@ -57,15 +55,40 @@ def get_feedback_detail(request, feedback_id):
             status=status.HTTP_403_FORBIDDEN,
         )
 
-    serializer = FeedbackDetailSerializer(feedback)
+    serializer = FeedbackDetailSerializer(feedback, context={"request": request})
     return Response(serializer.data, status=status.HTTP_200_OK)
 
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated, IsUser])
-@handle_feedback_response(FeedbackCreateSerializer)
+@parser_classes([MultiPartParser, FormParser])
 def create_feedback(request):
-    pass
+    try:
+        data = {
+            "title": request.data.get("title"),
+            "content": request.data.get("content"),
+            "type_id": request.data.get("type_id"),
+            "priority_id": request.data.get("priority_id"),
+        }
+
+        files = request.FILES.getlist("files")
+        if files:
+            data["files"] = files
+
+        serializer = FeedbackCreateSerializer(data=data, context={"request": request})
+
+        if serializer.is_valid():
+            feedback = serializer.save()
+            send_feedback_emails(feedback)
+            return Response(
+                FeedbackDetailSerializer(feedback, context={"request": request}).data,
+                status=status.HTTP_201_CREATED,
+            )
+
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 @api_view(["PUT"])
@@ -80,42 +103,10 @@ def update_feedback_status(request, feedback_id):
 
         notify_status_change(updated_feedback, old_status)
 
-        return Response(FeedbackDetailSerializer(updated_feedback).data)
-
-    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-
-@api_view(["POST"])
-@permission_classes([IsAuthenticated, IsOwnerOrAdmin])
-def upload_attachment(request, feedback_id):
-    feedback = get_object_or_404(Feedback, feedback_id=feedback_id)
-
-    if request.user.role.name != "admin" and feedback.user != request.user:
         return Response(
-            {"error": "Bạn không có quyền upload file cho feedback này"},
-            status=status.HTTP_403_FORBIDDEN,
-        )
-
-    if "file" not in request.FILES:
-        return Response(
-            {"error": "Không có file nào được upload"},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    file = request.FILES["file"]
-
-    attachment_data = {
-        "feedback": feedback,
-        "file_name": file.name,
-        "file_url": file,
-        "file_type": file.content_type,
-    }
-
-    serializer = AttachmentSerializer(data=attachment_data)
-    if serializer.is_valid():
-        attachment = serializer.create(attachment_data)
-        return Response(
-            AttachmentSerializer(attachment).data, status=status.HTTP_201_CREATED
+            FeedbackDetailSerializer(
+                updated_feedback, context={"request": request}
+            ).data
         )
 
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

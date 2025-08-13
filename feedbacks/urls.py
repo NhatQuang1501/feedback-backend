@@ -3,7 +3,6 @@ from .views import (
     get_feedback_list,
     create_feedback,
     get_feedback_detail,
-    upload_attachment,
     update_feedback_status,
 )
 
@@ -14,11 +13,6 @@ urlpatterns = [
         "feedbacks/<uuid:feedback_id>/",
         get_feedback_detail,
         name="feedback_detail",
-    ),
-    path(
-        "feedbacks/<uuid:feedback_id>/upload/",
-        upload_attachment,
-        name="upload_attachment",
     ),
     path(
         "feedbacks/<uuid:feedback_id>/status/",

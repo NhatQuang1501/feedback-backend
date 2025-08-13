@@ -9,6 +9,7 @@ from .tasks import (
     send_feedback_status_update_email,
 )
 from .choices import StatusChoices, FeedbackTypeChoices, PriorityChoices
+import os
 
 
 class CustomPagination(PageNumberPagination):
@@ -62,6 +63,32 @@ def notify_status_change(feedback, old_status):
         return StatusChoices.get_display_name(feedback.status.name)
 
     return None
+
+
+def validate_file(file):
+    max_size = 5 * 1024 * 1024
+    if file.size > max_size:
+        return False, "File không được vượt quá 5MB"
+
+    valid_extensions = [
+        ".pdf",
+        ".jpg",
+        ".jpeg",
+        ".png",
+        ".doc",
+        ".docx",
+        ".xls",
+        ".xlsx",
+        ".csv",
+    ]
+    ext = os.path.splitext(file.name)[1].lower()
+    if ext not in valid_extensions:
+        return (
+            False,
+            f"Định dạng file không được hỗ trợ. Các định dạng được hỗ trợ: {', '.join(valid_extensions)}",
+        )
+
+    return True, ""
 
 
 def handle_feedback_response(serializer_class):

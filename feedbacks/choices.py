@@ -15,8 +15,13 @@ VIETNAMESE_DISPLAY_NAMES = {
         "pending": "Chờ xử lý",
         "processing": "Đang xử lý",
         "resolved": "Đã xử lý",
-        # "closed": "Đã đóng",
     },
+}
+
+VALID_STATUS_TRANSITIONS = {
+    "pending": ["processing"],
+    "processing": ["resolved"],
+    "resolved": [],
 }
 
 
