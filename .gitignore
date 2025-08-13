@@ -5,4 +5,5 @@ env/
 __pycache__/
 /static/
 /media/
+/attachments/
 difference.py

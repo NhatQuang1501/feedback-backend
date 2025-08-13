@@ -67,7 +67,7 @@ class Attachment(models.Model):
         Feedback, on_delete=models.CASCADE, related_name="attachments"
     )
     file_name = models.CharField(max_length=255)
-    file_url = models.FileField(upload_to="media/")
+    file_url = models.FileField(upload_to="attachments/")
     file_type = models.CharField(max_length=100)
     uploaded_at = models.DateTimeField(auto_now_add=True)
 

@@ -12,9 +12,6 @@ logger = logging.getLogger(__name__)
 def send_feedback_confirmation_email(
     feedback_id, user_email, user_name, feedback_title
 ):
-    """
-    Gửi email xác nhận cho user khi đã gửi feedback thành công
-    """
     subject = "Xác nhận đã nhận phản hồi - FeedbackHub"
     body = (
         f"Kính gửi {user_name},\n\n"
@@ -63,9 +60,6 @@ def send_feedback_confirmation_email(
 def send_new_feedback_notification_to_admin(
     feedback_id, admin_email, user_name, feedback_title
 ):
-    """
-    Gửi email thông báo cho admin khi có feedback mới
-    """
     subject = "Thông báo phản hồi mới - FeedbackHub"
     body = (
         f"Kính gửi Quản trị viên,\n\n"
@@ -86,7 +80,6 @@ def send_new_feedback_notification_to_admin(
         )
         message.send()
 
-        # Lưu log email
         EmailLog.objects.create(
             feedback_id=feedback_id,
             email_to=admin_email,
@@ -117,13 +110,9 @@ def send_new_feedback_notification_to_admin(
 def send_feedback_status_update_email(
     feedback_id, user_email, user_name, feedback_title, new_status
 ):
-    """
-    Gửi email thông báo cho user khi trạng thái feedback thay đổi
-    """
-
     status_display = StatusChoices.get_display_name(new_status)
 
-    subject = f"Cập nhật trạng thái phản hồi - FeedbackHub"
+    subject = "Cập nhật trạng thái phản hồi - FeedbackHub"
     body = (
         f"Kính gửi {user_name},\n\n"
         f"Phản hồi của bạn với tiêu đề '{feedback_title}' đã được cập nhật trạng thái thành: {status_display}\n\n"
