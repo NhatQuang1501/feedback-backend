@@ -4,6 +4,7 @@ from .views import (
     create_feedback,
     get_feedback_detail,
     update_feedback_status,
+    get_feedback_overview_stats,
 )
 
 urlpatterns = [
@@ -19,4 +20,5 @@ urlpatterns = [
         update_feedback_status,
         name="update_feedback_status",
     ),
+    path("feedbacks/stats/overview/", get_feedback_overview_stats, name="feedback_overview_stats"),
 ]

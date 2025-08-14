@@ -22,8 +22,10 @@ from .utils import (
 )
 from accounts.permissions import IsUser, IsAdmin, IsOwnerOrAdmin
 from django.db.models import Q
+from django.db.models import Count
 from django.db.models.functions import Lower
 from django.db.models import F, Func, Value, TextField
+from .choices import StatusChoices, PriorityChoices
 
 
 @api_view(["GET"])
@@ -122,3 +124,37 @@ def update_feedback_status(request, feedback_id):
         )
 
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, IsAdmin])
+def get_feedback_overview_stats(request):
+    """Thống kê tổng quan dành cho admin.
+
+    Trả về:
+    - total_feedbacks
+    - pending_feedbacks
+    - processing_feedbacks
+    - resolved_feedbacks
+    """
+    stats = Feedback.objects.aggregate(
+        total_feedbacks=Count("feedback_id"),
+        pending_feedbacks=Count(
+            "feedback_id", filter=Q(status__name=StatusChoices.PENDING)
+        ),
+        processing_feedbacks=Count(
+            "feedback_id", filter=Q(status__name=StatusChoices.PROCESSING)
+        ),
+        resolved_feedbacks=Count(
+            "feedback_id", filter=Q(status__name=StatusChoices.RESOLVED)
+        ),
+        high_priority_pending_feedbacks=Count(
+            "feedback_id",
+            filter=Q(
+                priority__name=PriorityChoices.HIGH,
+                status__name=StatusChoices.PENDING,
+            ),
+        ),
+    )
+
+    return Response(stats, status=status.HTTP_200_OK)
