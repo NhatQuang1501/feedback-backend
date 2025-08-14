@@ -19,13 +19,16 @@ from .utils import (
     apply_feedback_filters,
     apply_keyword_search,
     apply_sorting,
+    get_monthly_feedback_counts,
 )
 from accounts.permissions import IsUser, IsAdmin, IsOwnerOrAdmin
 from django.db.models import Q
 from django.db.models import Count
-from django.db.models.functions import Lower
+from django.db.models.functions import Lower, TruncMonth
 from django.db.models import F, Func, Value, TextField
 from .choices import StatusChoices, PriorityChoices
+from django.utils.dateparse import parse_date
+from datetime import date
 
 
 @api_view(["GET"])
@@ -158,3 +161,18 @@ def get_feedback_overview_stats(request):
     )
 
     return Response(stats, status=status.HTTP_200_OK)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, IsAdmin])
+def feedbacks_by_month(request):
+    """Thống kê số lượng feedback theo tháng trong khoảng thời gian (Admin-only)."""
+    try:
+        data = get_monthly_feedback_counts(
+            request.query_params.get("from"),
+            request.query_params.get("to"),
+            request.query_params.get("order") or "desc",
+        )
+        return Response(data, status=status.HTTP_200_OK)
+    except ValueError as e:
+        return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)

@@ -3,15 +3,19 @@ from rest_framework.response import Response
 from rest_framework import status
 from functools import wraps
 from accounts.models import User
-from django.db.models import Q, F, Func, TextField
-from django.db.models.functions import Lower
+from django.db.models import Q, F, Func, TextField, Count
+from django.db.models.functions import Lower, TruncMonth
 from .tasks import (
     send_feedback_confirmation_email,
     send_new_feedback_notification_to_admin,
     send_feedback_status_update_email,
 )
 from .choices import StatusChoices, FeedbackTypeChoices, PriorityChoices
+from .models import Feedback
+from django.utils.dateparse import parse_date
+from datetime import date
 import os
+
 
 
 class CustomPagination(PageNumberPagination):
@@ -232,3 +236,55 @@ def apply_sorting(queryset, sort):
         "oldest": "created_at",
     }
     return queryset.order_by(sort_mapping.get(sort, "-created_at"))
+
+
+def _iter_months(start_d: date, end_d: date):
+    y, m = start_d.year, start_d.month
+    end_y, end_m = end_d.year, end_d.month
+    while (y < end_y) or (y == end_y and m <= end_m):
+        yield y, m
+        m += 1
+        if m == 13:
+            m = 1
+            y += 1
+
+
+def get_monthly_feedback_counts(from_param: str | None, to_param: str | None, order: str = "desc"):
+    to_date = parse_date(to_param) if to_param else date.today()
+    if to_date is None:
+        raise ValueError("Invalid 'to' date. Expected YYYY-MM-DD")
+
+    from_date = parse_date(from_param) if from_param else None
+    if from_date is None:
+        months_back = 5
+        year = to_date.year
+        month = to_date.month - months_back
+        while month <= 0:
+            month += 12
+            year -= 1
+        from_date = date(year, month, 1)
+
+    from_date = date(from_date.year, from_date.month, 1)
+
+    if (to_date.year, to_date.month) < (from_date.year, from_date.month):
+        raise ValueError("'to' month must be >= 'from' month")
+
+    month_keys = [f"{y:04d}-{m:02d}" for (y, m) in _iter_months(from_date, to_date)]
+
+    queryset = Feedback.objects.filter(
+        created_at__date__gte=from_date,
+        created_at__date__lte=to_date,
+    )
+
+    monthly_counts = (
+        queryset.annotate(month=TruncMonth("created_at")).values("month").annotate(
+            count=Count("feedback_id")
+        )
+    )
+
+    counts_map = {item["month"].strftime("%Y-%m"): item["count"] for item in monthly_counts}
+    data = [{"month": key, "count": counts_map.get(key, 0)} for key in month_keys]
+
+    if (order or "").lower() == "asc":
+        return data
+    return list(reversed(data))

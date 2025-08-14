@@ -5,6 +5,7 @@ from .views import (
     get_feedback_detail,
     update_feedback_status,
     get_feedback_overview_stats,
+    feedbacks_by_month,
 )
 
 urlpatterns = [
@@ -21,4 +22,5 @@ urlpatterns = [
         name="update_feedback_status",
     ),
     path("feedbacks/dashboard/overview/", get_feedback_overview_stats, name="feedback_overview_stats"),
+    path("feedbacks/dashboard/feedbacks-by-month/", feedbacks_by_month, name="feedbacks_by_month"),
 ]
