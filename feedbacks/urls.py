@@ -8,6 +8,7 @@ from .views import (
     feedbacks_by_month,
     feedback_types,
     priority_distribution,
+    handling_speed,
 )
 
 urlpatterns = [
@@ -27,4 +28,5 @@ urlpatterns = [
     path("feedbacks/dashboard/feedbacks-by-month/", feedbacks_by_month, name="feedbacks_by_month"),
     path("feedbacks/dashboard/feedback-types/", feedback_types, name="feedback_types"),
     path("feedbacks/dashboard/feedback-priority/", priority_distribution, name="priority_distribution"),
+    path("feedbacks/dashboard/handling-speed/", handling_speed, name="handling_speed"),
 ]

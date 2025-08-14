@@ -22,6 +22,7 @@ from .utils import (
     get_monthly_feedback_counts,
     get_feedback_type_counts,
     get_priority_distribution_counts,
+    get_handling_speed_by_month,
 )
 from accounts.permissions import IsUser, IsAdmin, IsOwnerOrAdmin
 from django.db.models import Q
@@ -202,6 +203,21 @@ def priority_distribution(request):
         data = get_priority_distribution_counts(
             request.query_params.get("from"),
             request.query_params.get("to"),
+        )
+        return Response(data, status=status.HTTP_200_OK)
+    except ValueError as e:
+        return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, IsAdmin])
+def handling_speed(request):
+    """Tốc độ xử lý phản hồi trung bình theo tháng (chỉ tính feedback đã resolved)."""
+    try:
+        data = get_handling_speed_by_month(
+            request.query_params.get("from"),
+            request.query_params.get("to"),
+            request.query_params.get("order") or "desc",
         )
         return Response(data, status=status.HTTP_200_OK)
     except ValueError as e:

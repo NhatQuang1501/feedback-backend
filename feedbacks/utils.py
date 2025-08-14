@@ -3,7 +3,7 @@ from rest_framework.response import Response
 from rest_framework import status
 from functools import wraps
 from accounts.models import User
-from django.db.models import Q, F, Func, TextField, Count
+from django.db.models import Q, F, Func, TextField, Count, Avg, ExpressionWrapper, DurationField
 from django.db.models.functions import Lower, TruncMonth
 from .tasks import (
     send_feedback_confirmation_email,
@@ -373,3 +373,53 @@ def get_priority_distribution_counts(from_param: str | None, to_param: str | Non
     ]
 
     return result
+
+
+def get_handling_speed_by_month(from_param: str | None, to_param: str | None, order: str = "desc"):
+    """Average handling speed (days) per month, computed for resolved feedbacks.
+
+    Uses resolution month (updated_at) and duration = updated_at - created_at.
+    Returns zero for months without resolved feedbacks.
+    """
+    from_date, to_date = resolve_date_range(
+        from_param,
+        to_param,
+        default_months_back=5,
+        floor_from_to_month=True,
+    )
+
+    month_keys = [f"{y:04d}-{m:02d}" for (y, m) in _iter_months(from_date, to_date)]
+
+    qs = (
+        Feedback.objects.filter(
+            status__name=StatusChoices.RESOLVED,
+            updated_at__date__gte=from_date,
+            updated_at__date__lte=to_date,
+        )
+        .annotate(
+            month=TruncMonth("updated_at"),
+            duration=ExpressionWrapper(
+                F("updated_at") - F("created_at"), output_field=DurationField()
+            ),
+        )
+        .values("month")
+        .annotate(avg_duration=Avg("duration"))
+    )
+
+    avg_map: dict[str, float] = {}
+    for row in qs:
+        td = row.get("avg_duration")
+        if td is None:
+            continue
+        # Convert timedelta to days with one decimal
+        days = round(td.total_seconds() / 86400.0, 1)
+        avg_map[row["month"].strftime("%Y-%m")] = days
+
+    data = [
+        {"month": f"{key[5:7]}/{key[0:4]}", "avg_days": avg_map.get(key, 0)}
+        for key in month_keys
+    ]
+
+    if (order or "").lower() == "asc":
+        return data
+    return list(reversed(data))
