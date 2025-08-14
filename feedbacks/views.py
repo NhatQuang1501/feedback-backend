@@ -19,8 +19,19 @@ from .utils import (
     apply_feedback_filters,
     apply_keyword_search,
     apply_sorting,
+    get_monthly_feedback_counts,
+    get_feedback_type_counts,
+    get_priority_distribution_counts,
+    get_handling_speed_by_month,
 )
 from accounts.permissions import IsUser, IsAdmin, IsOwnerOrAdmin
+from django.db.models import Q
+from django.db.models import Count
+from django.db.models.functions import Lower, TruncMonth
+from django.db.models import F, Func, Value, TextField
+from .choices import StatusChoices, PriorityChoices
+from django.utils.dateparse import parse_date
+from datetime import date
 
 
 @api_view(["GET"])
@@ -121,3 +132,95 @@ def update_feedback_status(request, feedback_id):
         )
 
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, IsAdmin])
+def get_feedback_overview_stats(request):
+    """Thống kê tổng quan dành cho admin.
+
+    Trả về:
+    - total_feedbacks
+    - pending_feedbacks
+    - processing_feedbacks
+    - resolved_feedbacks
+    """
+    stats = Feedback.objects.aggregate(
+        total_feedbacks=Count("feedback_id"),
+        pending_feedbacks=Count(
+            "feedback_id", filter=Q(status__name=StatusChoices.PENDING)
+        ),
+        processing_feedbacks=Count(
+            "feedback_id", filter=Q(status__name=StatusChoices.PROCESSING)
+        ),
+        resolved_feedbacks=Count(
+            "feedback_id", filter=Q(status__name=StatusChoices.RESOLVED)
+        ),
+        high_priority_pending_feedbacks=Count(
+            "feedback_id",
+            filter=Q(
+                priority__name=PriorityChoices.HIGH,
+                status__name=StatusChoices.PENDING,
+            ),
+        ),
+    )
+
+    return Response(stats, status=status.HTTP_200_OK)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, IsAdmin])
+def feedbacks_by_month(request):
+    """Thống kê số lượng feedback theo tháng trong khoảng thời gian (Admin-only)."""
+    try:
+        data = get_monthly_feedback_counts(
+            request.query_params.get("from"),
+            request.query_params.get("to"),
+            request.query_params.get("order") or "desc",
+        )
+        return Response(data, status=status.HTTP_200_OK)
+    except ValueError as e:
+        return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, IsAdmin])
+def feedback_types(request):
+    """Thống kê số lượng theo loại phản hồi trong khoảng thời gian (Admin-only)."""
+    try:
+        data = get_feedback_type_counts(
+            request.query_params.get("from"),
+            request.query_params.get("to"),
+        )
+        return Response(data, status=status.HTTP_200_OK)
+    except ValueError as e:
+        return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, IsAdmin])
+def priority_distribution(request):
+    """Phân bố số lượng theo mức độ ưu tiên trong khoảng thời gian (Admin-only)."""
+    try:
+        data = get_priority_distribution_counts(
+            request.query_params.get("from"),
+            request.query_params.get("to"),
+        )
+        return Response(data, status=status.HTTP_200_OK)
+    except ValueError as e:
+        return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, IsAdmin])
+def handling_speed(request):
+    """Tốc độ xử lý phản hồi trung bình theo tháng (chỉ tính feedback đã resolved)."""
+    try:
+        data = get_handling_speed_by_month(
+            request.query_params.get("from"),
+            request.query_params.get("to"),
+            request.query_params.get("order") or "desc",
+        )
+        return Response(data, status=status.HTTP_200_OK)
+    except ValueError as e:
+        return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
