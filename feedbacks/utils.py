@@ -288,3 +288,52 @@ def get_monthly_feedback_counts(from_param: str | None, to_param: str | None, or
     if (order or "").lower() == "asc":
         return data
     return list(reversed(data))
+
+
+def get_feedback_type_counts(from_param: str | None, to_param: str | None):
+    """Return counts for each feedback type in the given date range.
+
+    Always returns all defined types with zero fill when absent.
+    """
+    to_date = parse_date(to_param) if to_param else date.today()
+    if to_date is None:
+        raise ValueError("Invalid 'to' date. Expected YYYY-MM-DD")
+
+    from_date = parse_date(from_param) if from_param else None
+    if from_date is None:
+        # Default to beginning of the same 6-month window used elsewhere
+        months_back = 5
+        year = to_date.year
+        month = to_date.month - months_back
+        while month <= 0:
+            month += 12
+            year -= 1
+        from_date = date(year, month, 1)
+
+    if (to_date.year, to_date.month, to_date.day) < (from_date.year, from_date.month, from_date.day):
+        raise ValueError("'to' date must be >= 'from' date")
+
+    # Aggregate
+    qs = (
+        Feedback.objects.filter(
+            created_at__date__gte=from_date,
+            created_at__date__lte=to_date,
+        )
+        .values("type__name")
+        .annotate(count=Count("feedback_id"))
+    )
+
+    raw_map = {row["type__name"]: row["count"] for row in qs}
+
+    # Ensure stable order and zero fill for all defined types
+    ordered_types = FeedbackTypeChoices.get_values()
+    result = [
+        {
+            "type": type_code,
+            "display": FeedbackTypeChoices.get_display_name(type_code),
+            "count": int(raw_map.get(type_code, 0)),
+        }
+        for type_code in ordered_types
+    ]
+
+    return result
