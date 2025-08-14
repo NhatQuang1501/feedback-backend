@@ -21,6 +21,7 @@ from .utils import (
     apply_sorting,
     get_monthly_feedback_counts,
     get_feedback_type_counts,
+    get_priority_distribution_counts,
 )
 from accounts.permissions import IsUser, IsAdmin, IsOwnerOrAdmin
 from django.db.models import Q
@@ -185,6 +186,20 @@ def feedback_types(request):
     """Thống kê số lượng theo loại phản hồi trong khoảng thời gian (Admin-only)."""
     try:
         data = get_feedback_type_counts(
+            request.query_params.get("from"),
+            request.query_params.get("to"),
+        )
+        return Response(data, status=status.HTTP_200_OK)
+    except ValueError as e:
+        return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, IsAdmin])
+def priority_distribution(request):
+    """Phân bố số lượng theo mức độ ưu tiên trong khoảng thời gian (Admin-only)."""
+    try:
+        data = get_priority_distribution_counts(
             request.query_params.get("from"),
             request.query_params.get("to"),
         )

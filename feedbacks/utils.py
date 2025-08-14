@@ -238,6 +238,39 @@ def apply_sorting(queryset, sort):
     return queryset.order_by(sort_mapping.get(sort, "-created_at"))
 
 
+def resolve_date_range(
+    from_param: str | None,
+    to_param: str | None,
+    *,
+    default_months_back: int = 5,
+    floor_from_to_month: bool = False,
+) -> tuple[date, date]:
+    to_date = parse_date(to_param) if to_param else date.today()
+    if to_date is None:
+        raise ValueError("Invalid 'to' date. Expected YYYY-MM-DD")
+
+    from_date = parse_date(from_param) if from_param else None
+    if from_date is None:
+        year = to_date.year
+        month = to_date.month - default_months_back
+        while month <= 0:
+            month += 12
+            year -= 1
+        from_date = date(year, month, 1)
+
+    if floor_from_to_month:
+        from_date = date(from_date.year, from_date.month, 1)
+
+    if (to_date.year, to_date.month, to_date.day) < (
+        from_date.year,
+        from_date.month,
+        from_date.day,
+    ):
+        raise ValueError("'to' date must be >= 'from' date")
+
+    return from_date, to_date
+
+
 def _iter_months(start_d: date, end_d: date):
     y, m = start_d.year, start_d.month
     end_y, end_m = end_d.year, end_d.month
@@ -250,24 +283,12 @@ def _iter_months(start_d: date, end_d: date):
 
 
 def get_monthly_feedback_counts(from_param: str | None, to_param: str | None, order: str = "desc"):
-    to_date = parse_date(to_param) if to_param else date.today()
-    if to_date is None:
-        raise ValueError("Invalid 'to' date. Expected YYYY-MM-DD")
-
-    from_date = parse_date(from_param) if from_param else None
-    if from_date is None:
-        months_back = 5
-        year = to_date.year
-        month = to_date.month - months_back
-        while month <= 0:
-            month += 12
-            year -= 1
-        from_date = date(year, month, 1)
-
-    from_date = date(from_date.year, from_date.month, 1)
-
-    if (to_date.year, to_date.month) < (from_date.year, from_date.month):
-        raise ValueError("'to' month must be >= 'from' month")
+    from_date, to_date = resolve_date_range(
+        from_param,
+        to_param,
+        default_months_back=5,
+        floor_from_to_month=True,
+    )
 
     month_keys = [f"{y:04d}-{m:02d}" for (y, m) in _iter_months(from_date, to_date)]
 
@@ -295,23 +316,7 @@ def get_feedback_type_counts(from_param: str | None, to_param: str | None):
 
     Always returns all defined types with zero fill when absent.
     """
-    to_date = parse_date(to_param) if to_param else date.today()
-    if to_date is None:
-        raise ValueError("Invalid 'to' date. Expected YYYY-MM-DD")
-
-    from_date = parse_date(from_param) if from_param else None
-    if from_date is None:
-        # Default to beginning of the same 6-month window used elsewhere
-        months_back = 5
-        year = to_date.year
-        month = to_date.month - months_back
-        while month <= 0:
-            month += 12
-            year -= 1
-        from_date = date(year, month, 1)
-
-    if (to_date.year, to_date.month, to_date.day) < (from_date.year, from_date.month, from_date.day):
-        raise ValueError("'to' date must be >= 'from' date")
+    from_date, to_date = resolve_date_range(from_param, to_param, default_months_back=5)
 
     # Aggregate
     qs = (
@@ -334,6 +339,37 @@ def get_feedback_type_counts(from_param: str | None, to_param: str | None):
             "count": int(raw_map.get(type_code, 0)),
         }
         for type_code in ordered_types
+    ]
+
+    return result
+
+
+def get_priority_distribution_counts(from_param: str | None, to_param: str | None):
+    """Return counts for each priority in the given date range.
+
+    Always returns all defined priorities with zero fill when absent.
+    """
+    from_date, to_date = resolve_date_range(from_param, to_param, default_months_back=5)
+
+    qs = (
+        Feedback.objects.filter(
+            created_at__date__gte=from_date,
+            created_at__date__lte=to_date,
+        )
+        .values("priority__name")
+        .annotate(count=Count("feedback_id"))
+    )
+
+    raw_map = {row["priority__name"]: row["count"] for row in qs}
+
+    ordered_priorities = PriorityChoices.get_values()
+    result = [
+        {
+            "priority": pr_code,
+            "display": PriorityChoices.get_display_name(pr_code),
+            "count": int(raw_map.get(pr_code, 0)),
+        }
+        for pr_code in ordered_priorities
     ]
 
     return result
