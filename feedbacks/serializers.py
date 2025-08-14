@@ -97,6 +97,7 @@ class FeedbackListSerializer(serializers.ModelSerializer):
     user_id = serializers.UUIDField(source="user.user_id")
     user_full_name = serializers.CharField(source="user.full_name")
     user_role = serializers.CharField(source="user.role.name")
+    user_email = serializers.EmailField(source="user.email")
 
     def get_type_display(self, obj):
         return str(obj.type)
@@ -123,6 +124,7 @@ class FeedbackListSerializer(serializers.ModelSerializer):
             "user_id",
             "user_full_name",
             "user_role",
+            "user_email",
         ]
 
 
