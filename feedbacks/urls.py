@@ -20,5 +20,5 @@ urlpatterns = [
         update_feedback_status,
         name="update_feedback_status",
     ),
-    path("feedbacks/stats/overview/", get_feedback_overview_stats, name="feedback_overview_stats"),
+    path("feedbacks/dashboard/overview/", get_feedback_overview_stats, name="feedback_overview_stats"),
 ]
