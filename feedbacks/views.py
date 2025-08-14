@@ -21,9 +21,6 @@ from .utils import (
     apply_sorting,
 )
 from accounts.permissions import IsUser, IsAdmin, IsOwnerOrAdmin
-from django.db.models import Q
-from django.db.models.functions import Lower
-from django.db.models import F, Func, Value, TextField
 
 
 @api_view(["GET"])
@@ -37,18 +34,19 @@ def get_feedback_list(request):
     keyword = request.query_params.get("q")
     sort = request.query_params.get("sort", "newest")
 
-
+    # Role based access control
+    is_admin = IsAdmin().is_admin(request.user)
     queryset = (
         Feedback.objects.all()
-        if request.user.role.name == "admin"
+        if is_admin
         else Feedback.objects.filter(user=request.user)
     )
 
-    queryset = apply_feedback_filters(queryset, status_values, type_values, priority_values)
-
+    # Filter
+    queryset = apply_feedback_filters(
+        queryset, status_values, type_values, priority_values
+    )
     queryset = apply_keyword_search(queryset, keyword)
-
-
     queryset = apply_sorting(queryset, sort)
 
     page = paginator.paginate_queryset(queryset, request)
@@ -57,11 +55,12 @@ def get_feedback_list(request):
 
 
 @api_view(["GET"])
-@permission_classes([IsAuthenticated, IsOwnerOrAdmin])
+@permission_classes([IsAuthenticated])
 def get_feedback_detail(request, feedback_id):
     feedback = get_object_or_404(Feedback, feedback_id=feedback_id)
 
-    if request.user.role.name != "admin" and feedback.user != request.user:
+    # Kiểm tra quyền truy cập
+    if not IsOwnerOrAdmin().is_owner_or_admin(request.user, feedback):
         return Response(
             {"error": "Bạn không có quyền xem feedback này"},
             status=status.HTTP_403_FORBIDDEN,
@@ -88,7 +87,6 @@ def create_feedback(request):
             data["files"] = files
 
         serializer = FeedbackCreateSerializer(data=data, context={"request": request})
-
         if serializer.is_valid():
             feedback = serializer.save()
             send_feedback_emails(feedback)
@@ -118,7 +116,8 @@ def update_feedback_status(request, feedback_id):
         return Response(
             FeedbackDetailSerializer(
                 updated_feedback, context={"request": request}
-            ).data
+            ).data,
+            status=status.HTTP_200_OK,
         )
 
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

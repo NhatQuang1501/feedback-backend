@@ -5,10 +5,16 @@ class IsAdmin(permissions.BasePermission):
     def has_permission(self, request, view):
         return request.user.is_authenticated and request.user.role.name == "admin"
 
+    def is_admin(self, user):
+        return user.is_authenticated and user.role.name == "admin"
+
 
 class IsUser(permissions.BasePermission):
     def has_permission(self, request, view):
         return request.user.is_authenticated and request.user.role.name == "user"
+
+    def is_user(self, user):
+        return user.is_authenticated and user.role.name == "user"
 
 
 class IsSelf(permissions.BasePermission):
@@ -37,3 +43,8 @@ class IsOwnerOrAdmin(permissions.BasePermission):
         if request.user.role.name == "admin":
             return True
         return obj.user.user_id == request.user.user_id
+
+    def is_owner_or_admin(self, user, obj):
+        if user.role.name == "admin":
+            return True
+        return hasattr(obj, "user") and obj.user.user_id == user.user_id

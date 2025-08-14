@@ -1,17 +1,19 @@
+from functools import wraps
+import os
+
+from django.db.models import Q, F, Func, TextField
+from django.db.models.functions import Lower
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.response import Response
 from rest_framework import status
-from functools import wraps
+
 from accounts.models import User
-from django.db.models import Q, F, Func, TextField
-from django.db.models.functions import Lower
 from .tasks import (
     send_feedback_confirmation_email,
     send_new_feedback_notification_to_admin,
     send_feedback_status_update_email,
 )
 from .choices import StatusChoices, FeedbackTypeChoices, PriorityChoices
-import os
 
 
 class CustomPagination(PageNumberPagination):
@@ -34,6 +36,7 @@ class CustomPagination(PageNumberPagination):
 
 
 def send_feedback_emails(feedback):
+    """Gửi email xác nhận và thông báo cho admin khi có feedback mới."""
     send_feedback_confirmation_email.delay(
         str(feedback.feedback_id),
         feedback.user.email,
@@ -52,7 +55,7 @@ def send_feedback_emails(feedback):
 
 
 def notify_status_change(feedback, old_status):
-
+    """Thông báo khi trạng thái feedback thay đổi và trả về tên trạng thái hiển thị."""
     if feedback.status.name != old_status:
         send_feedback_status_update_email.delay(
             str(feedback.feedback_id),
@@ -61,9 +64,7 @@ def notify_status_change(feedback, old_status):
             feedback.title,
             feedback.status.name,
         )
-
         return StatusChoices.get_display_name(feedback.status.name)
-
     return None
 
 
@@ -84,6 +85,7 @@ def validate_file(file):
         ".csv",
     ]
     ext = os.path.splitext(file.name)[1].lower()
+
     if ext not in valid_extensions:
         return (
             False,
@@ -95,7 +97,8 @@ def validate_file(file):
 
 def handle_feedback_response(serializer_class):
     """
-    Decorator để xử lý response cho các view feedback, validate dữ liệu, lưu feedback và gửi email thông báo.
+    Decorator để xử lý response cho các view feedback, validate dữ liệu,
+    lưu feedback và gửi email thông báo.
     """
 
     def decorator(view_func):
@@ -107,19 +110,13 @@ def handle_feedback_response(serializer_class):
             if serializer.is_valid():
                 feedback = serializer.save()
 
-                if (
-                    hasattr(view_func, "__name__")
-                    and view_func.__name__ == "create_feedback"
-                ):
+                is_create = view_func.__name__ == "create_feedback"
+                if is_create:
                     send_feedback_emails(feedback)
 
                 return Response(
                     serializer_class(feedback, context={"request": request}).data,
-                    status=(
-                        status.HTTP_201_CREATED
-                        if view_func.__name__ == "create_feedback"
-                        else status.HTTP_200_OK
-                    ),
+                    status=status.HTTP_201_CREATED if is_create else status.HTTP_200_OK,
                 )
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -140,16 +137,17 @@ def translate_status(status_name):
     return StatusChoices.get_display_name(status_name)
 
 
-# -------- Query helpers for feedback list --------
+# Query helpers for feedback list
 def get_multi_values(request, key):
-    """Collect multi-value query params in multiple forms and normalize CSV.
-
-    Supports: key=a&key=b, key[]=a&key[]=b, and key=a,b (mixed allowed)
-    Returns a flat list of non-empty, stripped strings.
+    """
+    Thu thập các query params có nhiều giá trị và chuẩn hóa CSV.
+    Hỗ trợ: key=a&key=b, key[]=a&key[]=b, và key=a,b
+    Trả về danh sách các chuỗi đã được cắt khoảng trắng và loại bỏ chuỗi rỗng.
     """
     raw_values = []
     raw_values.extend(request.query_params.getlist(key))
     raw_values.extend(request.query_params.getlist(f"{key}[]"))
+
     single = request.query_params.get(key)
     if single:
         raw_values.append(single)
@@ -166,7 +164,7 @@ def get_multi_values(request, key):
 
 
 def apply_feedback_filters(queryset, status_values, type_values, priority_values):
-    """Apply status/type/priority filters when values are provided."""
+    """Áp dụng bộ lọc trạng thái/loại/độ ưu tiên khi có giá trị."""
     if status_values:
         queryset = queryset.filter(status__name__in=[v for v in status_values if v])
     if type_values:
@@ -184,7 +182,7 @@ def apply_keyword_search(queryset, keyword):
     if not keyword:
         return queryset
 
-    keyword_lower = (keyword or "").strip().lower()
+    keyword_lower = keyword.strip().lower()
     ascii_only = all(ord(ch) < 128 for ch in keyword_lower)
 
     if ascii_only:
