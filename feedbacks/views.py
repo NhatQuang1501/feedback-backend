@@ -4,6 +4,9 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.parsers import MultiPartParser, FormParser
+from django.conf import settings
+import os
+
 from .models import Feedback
 from .serializers import (
     FeedbackListSerializer,
@@ -15,17 +18,21 @@ from .utils import (
     CustomPagination,
     send_feedback_emails,
     notify_status_change,
+)
+from .filters import (
     get_multi_values,
     apply_feedback_filters,
     apply_keyword_search,
     apply_sorting,
 )
+from .tasks import export_feedbacks_to_csv
 from accounts.permissions import IsUser, IsAdmin, IsOwnerOrAdmin
 
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def get_feedback_list(request):
+    """Lấy danh sách phản hồi với phân trang và lọc."""
     paginator = CustomPagination()
 
     status_values = get_multi_values(request, "status")
@@ -57,6 +64,7 @@ def get_feedback_list(request):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def get_feedback_detail(request, feedback_id):
+    """Lấy chi tiết một phản hồi dựa trên ID."""
     feedback = get_object_or_404(Feedback, feedback_id=feedback_id)
 
     # Kiểm tra quyền truy cập
@@ -74,6 +82,7 @@ def get_feedback_detail(request, feedback_id):
 @permission_classes([IsAuthenticated, IsUser])
 @parser_classes([MultiPartParser, FormParser])
 def create_feedback(request):
+    """Tạo phản hồi mới với tệp đính kèm tùy chọn."""
     try:
         data = {
             "title": request.data.get("title"),
@@ -104,6 +113,7 @@ def create_feedback(request):
 @api_view(["PUT"])
 @permission_classes([IsAuthenticated, IsAdmin])
 def update_feedback_status(request, feedback_id):
+    """Cập nhật trạng thái của phản hồi (chỉ dành cho admin)."""
     feedback = get_object_or_404(Feedback, feedback_id=feedback_id)
     old_status = feedback.status.name
 
@@ -121,3 +131,77 @@ def update_feedback_status(request, feedback_id):
         )
 
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated, IsAdmin])
+def export_feedbacks(request):
+    """Khởi tạo tác vụ xuất danh sách phản hồi ra file CSV."""
+    try:
+        # filter parameters
+        status_values = request.data.get("status", [])
+        type_values = request.data.get("type", [])
+        priority_values = request.data.get("priority", [])
+        keyword = request.data.get("q")
+        sort = request.data.get("sort", "newest")
+
+        task = export_feedbacks_to_csv.delay(
+            status_values=status_values,
+            type_values=type_values,
+            priority_values=priority_values,
+            keyword=keyword,
+            sort=sort,
+            user_email=request.user.email,
+        )
+
+        return Response(
+            {
+                "task_id": task.id,
+                "message": "Đang xử lý yêu cầu export. Vui lòng đợi trong giây lát.",
+            },
+            status=status.HTTP_202_ACCEPTED,
+        )
+
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, IsAdmin])
+def check_export_status(request, task_id):
+    """Kiểm tra trạng thái của tác vụ xuất CSV."""
+    try:
+        task = export_feedbacks_to_csv.AsyncResult(task_id)
+
+        if task.ready():
+            result = task.get()
+            if result["status"] == "success":
+                file_url = request.build_absolute_uri(
+                    settings.MEDIA_URL + result["file_path"]
+                )
+
+                # Kiểm tra file có tồn tại không
+                full_path = os.path.join(settings.MEDIA_ROOT, result["file_path"])
+                if not os.path.exists(full_path):
+                    return Response(
+                        {"status": "error", "message": "File không tồn tại"},
+                        status=status.HTTP_404_NOT_FOUND,
+                    )
+
+                return Response(
+                    {
+                        "status": "completed",
+                        "file_url": file_url,
+                        "message": result["message"],
+                    }
+                )
+            else:
+                return Response(
+                    {"status": "error", "message": result["message"]},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        return Response({"status": "processing", "message": "Đang xử lý..."})
+
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

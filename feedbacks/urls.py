@@ -4,6 +4,8 @@ from .views import (
     create_feedback,
     get_feedback_detail,
     update_feedback_status,
+    export_feedbacks,
+    check_export_status,
 )
 
 urlpatterns = [
@@ -18,5 +20,11 @@ urlpatterns = [
         "feedbacks/<uuid:feedback_id>/status/",
         update_feedback_status,
         name="update_feedback_status",
+    ),
+    path("feedbacks/export/", export_feedbacks, name="export_feedbacks"),
+    path(
+        "feedbacks/export/<str:task_id>/status/",
+        check_export_status,
+        name="check_export_status",
     ),
 ]

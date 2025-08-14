@@ -21,6 +21,7 @@ services:
       - .:/app
       - static_volume:/app/static
       - media_volume:/app/media
+      - ./media:/app/media
     environment:
       - DJANGO_SETTINGS_MODULE=feedback.settings
       - DEBUG=True
