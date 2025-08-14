@@ -11,8 +11,19 @@ from .serializers import (
     FeedbackCreateSerializer,
     FeedbackUpdateStatusSerializer,
 )
-from .utils import CustomPagination, send_feedback_emails, notify_status_change
+from .utils import (
+    CustomPagination,
+    send_feedback_emails,
+    notify_status_change,
+    get_multi_values,
+    apply_feedback_filters,
+    apply_keyword_search,
+    apply_sorting,
+)
 from accounts.permissions import IsUser, IsAdmin, IsOwnerOrAdmin
+from django.db.models import Q
+from django.db.models.functions import Lower
+from django.db.models import F, Func, Value, TextField
 
 
 @api_view(["GET"])
@@ -20,27 +31,28 @@ from accounts.permissions import IsUser, IsAdmin, IsOwnerOrAdmin
 def get_feedback_list(request):
     paginator = CustomPagination()
 
-    status_filter = request.query_params.get("status")
-    type_filter = request.query_params.get("type")
-    priority_filter = request.query_params.get("priority")
+    status_values = get_multi_values(request, "status")
+    type_values = get_multi_values(request, "type")
+    priority_values = get_multi_values(request, "priority")
+    keyword = request.query_params.get("q")
+    sort = request.query_params.get("sort", "newest")
 
-    if request.user.role.name == "admin":
-        queryset = Feedback.objects.all()
-    else:
-        queryset = Feedback.objects.filter(user=request.user)
 
-    if status_filter:
-        queryset = queryset.filter(status__name=status_filter)
-    if type_filter:
-        queryset = queryset.filter(type__name=type_filter)
-    if priority_filter:
-        queryset = queryset.filter(priority__name=priority_filter)
+    queryset = (
+        Feedback.objects.all()
+        if request.user.role.name == "admin"
+        else Feedback.objects.filter(user=request.user)
+    )
 
-    queryset = queryset.order_by("-created_at")
+    queryset = apply_feedback_filters(queryset, status_values, type_values, priority_values)
+
+    queryset = apply_keyword_search(queryset, keyword)
+
+
+    queryset = apply_sorting(queryset, sort)
 
     page = paginator.paginate_queryset(queryset, request)
     serializer = FeedbackListSerializer(page, many=True, context={"request": request})
-
     return paginator.get_paginated_response(serializer.data)
 
 
