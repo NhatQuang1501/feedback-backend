@@ -61,17 +61,12 @@ def main():
     check_redis_connection()
 
     try:
-        # Basic Django setup
         django.setup()
         print("Setup Django succesfully!")
 
-        # Các bước tiếp theo...
-
-        # Run migrations
         print("Running migrations...")
         execute_from_command_line(["manage.py", "migrate", "--noinput"])
 
-        # Collect static files
         print("Collecting static files...")
         execute_from_command_line(
             ["manage.py", "collectstatic", "--noinput", "--clear", "--verbosity", "0"]
@@ -80,7 +75,6 @@ def main():
         print("Backend setup complete!")
         print("Starting server at http://127.0.0.1:8000")
 
-        # Start server
         execute_from_command_line(["manage.py", "runserver", "0.0.0.0:8000"])
 
     except Exception as e:
