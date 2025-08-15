@@ -4,6 +4,11 @@ from .views import (
     create_feedback,
     get_feedback_detail,
     update_feedback_status,
+    get_feedback_overview_stats,
+    feedbacks_by_month,
+    feedback_types,
+    priority_distribution,
+    handling_speed,
     export_feedbacks,
     check_export_status,
 )
@@ -21,6 +26,23 @@ urlpatterns = [
         update_feedback_status,
         name="update_feedback_status",
     ),
+    path(
+        "feedbacks/dashboard/overview/",
+        get_feedback_overview_stats,
+        name="feedback_overview_stats",
+    ),
+    path(
+        "feedbacks/dashboard/feedbacks-by-month/",
+        feedbacks_by_month,
+        name="feedbacks_by_month",
+    ),
+    path("feedbacks/dashboard/feedback-types/", feedback_types, name="feedback_types"),
+    path(
+        "feedbacks/dashboard/feedback-priority/",
+        priority_distribution,
+        name="priority_distribution",
+    ),
+    path("feedbacks/dashboard/handling-speed/", handling_speed, name="handling_speed"),
     path("feedbacks/export/", export_feedbacks, name="export_feedbacks"),
     path(
         "feedbacks/export/<str:task_id>/status/",
