@@ -175,8 +175,8 @@ def export_feedbacks_to_csv(
                 )
 
         # Trả về đường dẫn tương đối để truy cập qua URL
-        # relative_path = os.path.join("exports", filename)
-        relative_path = f"exports/{filename}"
+        relative_path = os.path.join("exports", filename)
+        # relative_path = f"exports/{filename}"
 
         # Thêm thông tin số lượng records vào kết quả
         return {
@@ -189,5 +189,5 @@ def export_feedbacks_to_csv(
 
     except Exception as e:
         error_msg = f"Export error: {str(e)}"
-        logger.error(error_msg, exc_info=True)  # Log full traceback
+        logger.error(error_msg, exc_info=True)
         return {"status": "error", "message": f"Lỗi khi export: {str(e)}"}

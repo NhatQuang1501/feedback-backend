@@ -20,7 +20,8 @@ RUN pip install --no-cache-dir --upgrade pip \
 
 COPY . .
 
-RUN mkdir -p /app/static /app/media
+# RUN mkdir -p /app/static /app/media
+RUN mkdir -p /app/static /app/media /app/media/exports /app/media/attachments
 
 EXPOSE 8000
 
