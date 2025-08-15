@@ -4,6 +4,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.parsers import MultiPartParser, FormParser
+
 from .models import Feedback
 from .serializers import (
     FeedbackListSerializer,
@@ -11,14 +12,16 @@ from .serializers import (
     FeedbackCreateSerializer,
     FeedbackUpdateStatusSerializer,
 )
-from .utils import (
-    CustomPagination,
-    send_feedback_emails,
-    notify_status_change,
+from .filters import (
     get_multi_values,
     apply_feedback_filters,
     apply_keyword_search,
     apply_sorting,
+)
+from .utils import (
+    CustomPagination,
+    send_feedback_emails,
+    notify_status_change,
     get_monthly_feedback_counts,
     get_feedback_type_counts,
     get_priority_distribution_counts,
@@ -27,16 +30,40 @@ from .utils import (
 from accounts.permissions import IsUser, IsAdmin, IsOwnerOrAdmin
 from django.db.models import Q
 from django.db.models import Count
-from django.db.models.functions import Lower, TruncMonth
-from django.db.models import F, Func, Value, TextField
 from .choices import StatusChoices, PriorityChoices
-from django.utils.dateparse import parse_date
-from datetime import date
+
+import json
+from django.http import StreamingHttpResponse
+from django.core.cache import cache
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.response import Response
+from rest_framework import status
+from rest_framework.permissions import IsAuthenticated
+
+from .tasks import export_feedbacks_to_csv
+from accounts.permissions import IsAdmin
+
+import uuid as uuid_module
+
+
+def clean_feedback_id(feedback_id):
+    """Làm sạch feedback_id bằng cách loại bỏ BOM và validate UUID."""
+    # Loại bỏ BOM nếu có
+    if feedback_id.startswith("\ufeff"):
+        feedback_id = feedback_id[1:]
+
+    # Validate UUID format
+    try:
+        uuid_module.UUID(feedback_id)
+        return feedback_id
+    except ValueError:
+        raise ValueError("Invalid UUID format")
 
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def get_feedback_list(request):
+    """Lấy danh sách phản hồi với phân trang và lọc."""
     paginator = CustomPagination()
 
     status_values = get_multi_values(request, "status")
@@ -68,12 +95,20 @@ def get_feedback_list(request):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def get_feedback_detail(request, feedback_id):
+    """Lấy chi tiết một phản hồi dựa trên ID."""
+    try:
+        feedback_id = clean_feedback_id(feedback_id)
+    except ValueError:
+        return Response(
+            {"error": "Invalid feedback ID format"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
     feedback = get_object_or_404(Feedback, feedback_id=feedback_id)
 
-    # Kiểm tra quyền truy cập
     if not IsOwnerOrAdmin().is_owner_or_admin(request.user, feedback):
         return Response(
-            {"error": "Bạn không có quyền xem feedback này"},
+            {"error": "You don't have permission to view this feedback"},
             status=status.HTTP_403_FORBIDDEN,
         )
 
@@ -85,6 +120,7 @@ def get_feedback_detail(request, feedback_id):
 @permission_classes([IsAuthenticated, IsUser])
 @parser_classes([MultiPartParser, FormParser])
 def create_feedback(request):
+    """Tạo phản hồi mới với tệp đính kèm tùy chọn."""
     try:
         data = {
             "title": request.data.get("title"),
@@ -115,13 +151,20 @@ def create_feedback(request):
 @api_view(["PUT"])
 @permission_classes([IsAuthenticated, IsAdmin])
 def update_feedback_status(request, feedback_id):
-    feedback = get_object_or_404(Feedback, feedback_id=feedback_id)
+    """Cập nhật trạng thái của phản hồi (chỉ dành cho admin)."""
+    try:
+        feedback = get_object_or_404(Feedback, feedback_id=feedback_id)
+    except ValueError:
+        return Response(
+            {"error": "Invalid feedback ID format"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
     old_status = feedback.status.name
 
     serializer = FeedbackUpdateStatusSerializer(feedback, data=request.data)
     if serializer.is_valid():
         updated_feedback = serializer.save()
-
         notify_status_change(updated_feedback, old_status)
 
         return Response(
@@ -224,3 +267,113 @@ def handling_speed(request):
         return Response(data, status=status.HTTP_200_OK)
     except ValueError as e:
         return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated, IsAdmin])
+def export_feedbacks(request):
+    """Khởi tạo tác vụ xuất danh sách phản hồi ra file CSV."""
+    try:
+        # filter parameters
+        status_values = request.data.get("status", [])
+        type_values = request.data.get("type", [])
+        priority_values = request.data.get("priority", [])
+        keyword = request.data.get("q")
+        sort = request.data.get("sort", "newest")
+
+        task = export_feedbacks_to_csv.delay(
+            status_values=status_values,
+            type_values=type_values,
+            priority_values=priority_values,
+            keyword=keyword,
+            sort=sort,
+            user_email=request.user.email,
+        )
+
+        return Response(
+            {
+                "task_id": task.id,
+                "message": "Processing export request...",
+            },
+            status=status.HTTP_202_ACCEPTED,
+        )
+
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, IsAdmin])
+def check_export_status(request, task_id):
+    """Kiểm tra trạng thái của tác vụ xuất CSV."""
+    try:
+        task = export_feedbacks_to_csv.AsyncResult(task_id)
+
+        if task.ready():
+            result = task.get()
+            if result["status"] == "success":
+                download_path = f"/api/feedbacks/export/download/{result['csv_id']}/"
+                return Response(
+                    {
+                        "status": "completed",
+                        "csv_id": result["csv_id"],
+                        "filename": result["filename"],
+                        "message": result["message"],
+                        "download_url": request.build_absolute_uri(download_path),
+                    }
+                )
+            else:
+                return Response(
+                    {"status": "error", "message": result["message"]},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        return Response({"status": "processing", "message": "Processing..."})
+
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated, IsAdmin])
+def download_csv(request, csv_id):
+    """Tải xuống file CSV từ dữ liệu đã được lưu trong Redis."""
+    try:
+        # Get CSV data from Redis
+        cache_key = f"csv_export:{csv_id}"
+        cached_data = cache.get(cache_key)
+
+        if not cached_data:
+            return Response(
+                {"error": "CSV data not found or expired"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        data = json.loads(cached_data)
+        csv_data = data.get("csv_data")
+        filename = data.get("filename")
+
+        if not csv_data or not filename:
+            return Response(
+                {"error": "Invalid CSV data"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        def csv_generator():
+            yield "\ufeff"
+            for line in csv_data.splitlines():
+                yield line + "\n"
+
+        response = StreamingHttpResponse(
+            csv_generator(), content_type="text/csv; charset=utf-8"
+        )
+
+        response["Content-Disposition"] = f'attachment; filename="{filename}"'
+
+        return response
+
+    except Exception as e:
+        return Response(
+            {"error": f"Error when downloading CSV file: {str(e)}"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
