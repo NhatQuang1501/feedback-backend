@@ -11,10 +11,8 @@ from .choices import (
     FeedbackTypeChoices,
     PriorityChoices,
     StatusChoices,
-    VIETNAMESE_DISPLAY_NAMES,
     VALID_STATUS_TRANSITIONS,
 )
-from accounts.serializers import UserSerializer
 from .utils import validate_file
 
 
@@ -237,9 +235,9 @@ class FeedbackUpdateStatusSerializer(serializers.ModelSerializer):
             ]
 
             if not valid_transitions:
-                error_msg = f"Không thể thay đổi trạng thái từ '{StatusChoices.get_display_name(current_status)}'."
+                error_msg = f"Cannot change status from '{StatusChoices.get_display_name(current_status)}'."
             else:
-                error_msg = f"Từ '{StatusChoices.get_display_name(current_status)}' chỉ có thể chuyển sang: {', '.join(valid_names)}."
+                error_msg = f"From '{StatusChoices.get_display_name(current_status)}' can only be changed to: {', '.join(valid_names)}."
 
             raise serializers.ValidationError({"status_id": error_msg})
 

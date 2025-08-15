@@ -1,10 +1,13 @@
 import csv
-import os
+import io
+import json
 import logging
+import uuid
 from celery import shared_task
 from django.core.mail import EmailMultiAlternatives
 from django.conf import settings
 from django.utils import timezone
+from django.core.cache import cache
 
 from .models import EmailLog, Feedback, Attachment
 from .choices import StatusChoices
@@ -102,21 +105,9 @@ def export_feedbacks_to_csv(
     sort="newest",
     user_email=None,
 ):
-    """Export danh sách feedback sang file CSV."""
+    """Tạo dữ liệu CSV trong bộ nhớ và lưu vào Redis."""
     try:
-        # Tạo thư mục lưu file nếu chưa tồn tại
-        export_dir = os.path.join(settings.MEDIA_ROOT, "exports")
-        os.makedirs(export_dir, exist_ok=True)
-
-        # Tạo tên file với timestamp
-        timestamp = timezone.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"feedbacks_export_{timestamp}.csv"
-        filepath = os.path.join(export_dir, filename)
-
-        # Log đường dẫn đầy đủ của file để debug
-        logger.info(f"Exporting CSV to: {filepath}")
-
-        # Áp dụng các filter - Sử dụng select_related và prefetch_related để tối ưu query
+        # Apply filters
         queryset = Feedback.objects.select_related(
             "user", "type", "priority", "status"
         ).prefetch_related("attachments")
@@ -126,68 +117,78 @@ def export_feedbacks_to_csv(
         queryset = apply_keyword_search(queryset, keyword)
         queryset = apply_sorting(queryset, sort)
 
-        # Đếm số lượng records để log và phản hồi người dùng
+        # Count feedbacks
         count = queryset.count()
-        logger.info(f"Exporting {count} feedback records")
+        logger.info(f"Preparing CSV data for {count} feedback records")
 
-        # Ghi dữ liệu trực tiếp vào file thay vì buffer để tiết kiệm bộ nhớ
-        with open(filepath, mode="w", newline="", encoding="utf-8-sig") as csv_file:
-            fieldnames = [
-                "Feedback ID",
-                "Tiêu đề",
-                "Nội dung",
-                "Loại phản hồi",
-                "Mức độ ưu tiên",
-                "Trạng thái",
-                "Người gửi",
-                "Email",
-                "Ngày tạo",
-                "Ngày cập nhật",
-                "File đính kèm",
-            ]
-            writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
-            writer.writeheader()
+        # Create CSV buffer
+        csv_buffer = io.StringIO()
+        fieldnames = [
+            "Feedback ID",
+            "Tiêu đề",
+            "Nội dung",
+            "Loại phản hồi",
+            "Mức độ ưu tiên",
+            "Trạng thái",
+            "Người gửi",
+            "Email",
+            "Ngày tạo",
+            "Ngày cập nhật",
+            "File đính kèm",
+        ]
+        writer = csv.DictWriter(csv_buffer, fieldnames=fieldnames)
+        writer.writeheader()
 
-            # Xử lý từng feedback với chunk_size để tránh giữ tất cả dữ liệu trong bộ nhớ
-            chunk_size = 100  # Xử lý 100 records mỗi lần
-            for feedback in queryset.iterator(chunk_size=chunk_size):
-                # Lấy attachments - do đã prefetch_related nên không tạo thêm query
-                attachments = ", ".join(
-                    [attachment.file_name for attachment in feedback.attachments.all()]
-                )
+        chunk_size = 100
+        rows = []
 
-                writer.writerow(
-                    {
-                        "Feedback ID": str(feedback.feedback_id),
-                        "Tiêu đề": feedback.title,
-                        "Nội dung": feedback.content,
-                        "Loại phản hồi": str(feedback.type),
-                        "Mức độ ưu tiên": str(feedback.priority),
-                        "Trạng thái": str(feedback.status),
-                        "Người gửi": feedback.user.full_name,
-                        "Email": feedback.user.email,
-                        "Ngày tạo": feedback.created_at.strftime("%Y-%m-%d %H:%M:%S"),
-                        "Ngày cập nhật": feedback.updated_at.strftime(
-                            "%Y-%m-%d %H:%M:%S"
-                        ),
-                        "File đính kèm": attachments,
-                    }
-                )
+        for feedback in queryset.iterator(chunk_size=chunk_size):
+            attachments = ", ".join(
+                [attachment.file_name for attachment in feedback.attachments.all()]
+            )
 
-        # Trả về đường dẫn tương đối để truy cập qua URL
-        relative_path = os.path.join("exports", filename)
-        # relative_path = f"exports/{filename}"
+            rows.append(
+                {
+                    "Feedback ID": str(feedback.feedback_id),
+                    "Tiêu đề": feedback.title,
+                    "Nội dung": feedback.content,
+                    "Loại phản hồi": str(feedback.type),
+                    "Mức độ ưu tiên": str(feedback.priority),
+                    "Trạng thái": str(feedback.status),
+                    "Người gửi": feedback.user.full_name,
+                    "Email": feedback.user.email,
+                    "Ngày tạo": feedback.created_at.strftime("%Y-%m-%d %H:%M:%S"),
+                    "Ngày cập nhật": feedback.updated_at.strftime("%Y-%m-%d %H:%M:%S"),
+                    "File đính kèm": attachments,
+                }
+            )
+            writer.writerow(rows[-1])
 
-        # Thêm thông tin số lượng records vào kết quả
+        csv_id = str(uuid.uuid4())
+
+        timestamp = timezone.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"feedbacks_export_{timestamp}.csv"
+
+        cache_data = {
+            "csv_data": csv_buffer.getvalue(),
+            "filename": filename,
+            "count": count,
+            "rows": rows,
+        }
+
+        cache.set(f"csv_export:{csv_id}", json.dumps(cache_data), timeout=1800)
+
+        logger.info(f"CSV data prepared and stored in Redis with ID: {csv_id}")
+
         return {
             "status": "success",
-            "file_path": relative_path,
-            "message": f"Export thành công {count} bản ghi",
-            "count": count,
+            "csv_id": csv_id,
             "filename": filename,
+            "message": f"CSV data prepared and stored in Redis with ID: {csv_id}",
+            "count": count,
         }
 
     except Exception as e:
-        error_msg = f"Export error: {str(e)}"
+        error_msg = f"CSV preparation error: {str(e)}"
         logger.error(error_msg, exc_info=True)
-        return {"status": "error", "message": f"Lỗi khi export: {str(e)}"}
+        return {"status": "error", "message": f"Failed to prepare CSV data: {str(e)}"}

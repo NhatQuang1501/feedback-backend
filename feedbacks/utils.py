@@ -1,34 +1,27 @@
-from functools import wraps
 import os
-
-from django.db.models import Q, F, Func, TextField
-from django.db.models.functions import Lower
+from datetime import date
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.response import Response
 from rest_framework import status
+from django.utils.dateparse import parse_date
+from functools import wraps
 
-from accounts.models import User
 from django.db.models import (
-    Q,
     F,
-    Func,
-    TextField,
     Count,
     Avg,
     ExpressionWrapper,
     DurationField,
 )
-from django.db.models.functions import Lower, TruncMonth
+from django.db.models.functions import TruncMonth
+from accounts.models import User
+from .models import Feedback
 from .tasks import (
     send_feedback_confirmation_email,
     send_new_feedback_notification_to_admin,
     send_feedback_status_update_email,
 )
 from .choices import StatusChoices, FeedbackTypeChoices, PriorityChoices
-from .models import Feedback
-from django.utils.dateparse import parse_date
-from datetime import date
-import os
 
 
 class CustomPagination(PageNumberPagination):
