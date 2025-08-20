@@ -269,7 +269,7 @@ def export_feedbacks(request):
             priority_values=priority_values,
             keyword=keyword,
             sort=sort,
-            user_email=request.user.email,
+            # user_email=request.user.email,
         )
 
         return Response(
