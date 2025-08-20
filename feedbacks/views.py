@@ -47,12 +47,8 @@ import uuid as uuid_module
 
 
 def clean_feedback_id(feedback_id):
-    """Làm sạch feedback_id bằng cách loại bỏ BOM và validate UUID."""
-    # Loại bỏ BOM nếu có
     if feedback_id.startswith("\ufeff"):
         feedback_id = feedback_id[1:]
-
-    # Validate UUID format
     try:
         uuid_module.UUID(feedback_id)
         return feedback_id
@@ -63,7 +59,6 @@ def clean_feedback_id(feedback_id):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def get_feedback_list(request):
-    """Lấy danh sách phản hồi với phân trang và lọc."""
     paginator = CustomPagination()
 
     status_values = get_multi_values(request, "status")
@@ -72,7 +67,6 @@ def get_feedback_list(request):
     keyword = request.query_params.get("q")
     sort = request.query_params.get("sort", "newest")
 
-    # Role based access control
     is_admin = IsAdmin().is_admin(request.user)
     queryset = (
         Feedback.objects.all()
@@ -80,7 +74,6 @@ def get_feedback_list(request):
         else Feedback.objects.filter(user=request.user)
     )
 
-    # Filter
     queryset = apply_feedback_filters(
         queryset, status_values, type_values, priority_values
     )
@@ -95,7 +88,6 @@ def get_feedback_list(request):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def get_feedback_detail(request, feedback_id):
-    """Lấy chi tiết một phản hồi dựa trên ID."""
     try:
         feedback_id = clean_feedback_id(feedback_id)
     except ValueError:
@@ -120,7 +112,6 @@ def get_feedback_detail(request, feedback_id):
 @permission_classes([IsAuthenticated, IsUser])
 @parser_classes([MultiPartParser, FormParser])
 def create_feedback(request):
-    """Tạo phản hồi mới với tệp đính kèm tùy chọn."""
     try:
         data = {
             "title": request.data.get("title"),
@@ -151,7 +142,6 @@ def create_feedback(request):
 @api_view(["PUT"])
 @permission_classes([IsAuthenticated, IsAdmin])
 def update_feedback_status(request, feedback_id):
-    """Cập nhật trạng thái của phản hồi (chỉ dành cho admin)."""
     try:
         feedback = get_object_or_404(Feedback, feedback_id=feedback_id)
     except ValueError:
@@ -180,9 +170,7 @@ def update_feedback_status(request, feedback_id):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated, IsAdmin])
 def get_feedback_overview_stats(request):
-    """Thống kê tổng quan dành cho admin.
-
-    Trả về:
+    """
     - total_feedbacks
     - pending_feedbacks
     - processing_feedbacks
@@ -214,7 +202,6 @@ def get_feedback_overview_stats(request):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated, IsAdmin])
 def feedbacks_by_month(request):
-    """Thống kê số lượng feedback theo tháng trong khoảng thời gian (Admin-only)."""
     try:
         data = get_monthly_feedback_counts(
             request.query_params.get("from"),
@@ -229,7 +216,6 @@ def feedbacks_by_month(request):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated, IsAdmin])
 def feedback_types(request):
-    """Thống kê số lượng theo loại phản hồi trong khoảng thời gian (Admin-only)."""
     try:
         data = get_feedback_type_counts(
             request.query_params.get("from"),
@@ -243,7 +229,6 @@ def feedback_types(request):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated, IsAdmin])
 def priority_distribution(request):
-    """Phân bố số lượng theo mức độ ưu tiên trong khoảng thời gian (Admin-only)."""
     try:
         data = get_priority_distribution_counts(
             request.query_params.get("from"),
@@ -257,7 +242,6 @@ def priority_distribution(request):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated, IsAdmin])
 def handling_speed(request):
-    """Tốc độ xử lý phản hồi trung bình theo tháng (chỉ tính feedback đã resolved)."""
     try:
         data = get_handling_speed_by_month(
             request.query_params.get("from"),
@@ -272,7 +256,6 @@ def handling_speed(request):
 @api_view(["POST"])
 @permission_classes([IsAuthenticated, IsAdmin])
 def export_feedbacks(request):
-    """Khởi tạo tác vụ xuất danh sách phản hồi ra file CSV."""
     try:
         status_values = request.data.get("status", [])
         type_values = request.data.get("type", [])
@@ -304,7 +287,6 @@ def export_feedbacks(request):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated, IsAdmin])
 def check_export_status(request, task_id):
-    """Kiểm tra trạng thái của tác vụ xuất CSV."""
     try:
         task = export_feedbacks_to_csv.AsyncResult(task_id)
 
@@ -336,9 +318,7 @@ def check_export_status(request, task_id):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated, IsAdmin])
 def download_csv(request, csv_id):
-    """Tải xuống file CSV từ dữ liệu đã được lưu trong Redis."""
     try:
-        # Get CSV data from Redis
         cache_key = f"csv_export:{csv_id}"
         cached_data = cache.get(cache_key)
 

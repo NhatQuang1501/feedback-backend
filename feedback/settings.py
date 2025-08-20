@@ -188,10 +188,7 @@ SIMPLE_JWT = {
     "USER_ID_CLAIM": "user_id",
     "AUTH_TOKEN_CLASSES": ("rest_framework_simplejwt.tokens.AccessToken",),
     "TOKEN_TYPE_CLAIM": "token_type",
-    # "JTI_CLAIM": "jti",
     "TOKEN_USER_CLASS": "accounts.User",
-    # "SLIDING_TOKEN_OBTAIN_SERIALIZER": "rest_framework_simplejwt.serializers.TokenObtainSlidingSerializer",
-    # "SLIDING_TOKEN_REFRESH_SERIALIZER": "rest_framework_simplejwt.serializers.TokenRefreshSlidingSerializer",
 }
 
 CACHES = {
@@ -241,33 +238,10 @@ EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD")
 
 OTP_EXPIRY_TIME = 300
 
-# Frontend URLs for email links
+# Frontend URLs
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:3000")
 ADMIN_URL = os.environ.get("ADMIN_URL", "http://127.0.0.1:8000/admin")
 
-# Google OAuth settings
+# Google OAuth
 GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "")
 GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", "")
-
-# # Social Authentication (Alternative approach)
-# AUTHENTICATION_BACKENDS = (
-#     "social_core.backends.google.GoogleOAuth2",
-#     "social_core.backends.facebook.FacebookOAuth2",
-#     "django.contrib.auth.backends.ModelBackend",
-# )
-
-# # OAuth settings
-# SOCIAL_AUTH_GOOGLE_OAUTH2_KEY = os.environ.get("GOOGLE_CLIENT_ID", "")
-# SOCIAL_AUTH_GOOGLE_OAUTH2_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", "")
-
-# SOCIAL_AUTH_PIPELINE = (
-#     "social_core.pipeline.social_auth.social_details",
-#     "social_core.pipeline.social_auth.social_uid",
-#     "social_core.pipeline.social_auth.auth_allowed",
-#     "social_core.pipeline.social_auth.social_user",
-#     "social_core.pipeline.user.get_username",
-#     "social_core.pipeline.user.create_user",
-#     "social_core.pipeline.social_auth.associate_user",
-#     "social_core.pipeline.social_auth.load_extra_data",
-#     "social_core.pipeline.user.user_details",
-# )

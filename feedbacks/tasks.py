@@ -104,23 +104,16 @@ def export_feedbacks_to_csv(
     priority_values=None,
     keyword=None,
     sort="newest",
-    user_email=None,
 ):
-    """Export danh sách feedback sang file CSV."""
     try:
-        # Tạo thư mục lưu file nếu chưa tồn tại
         export_dir = os.path.join(settings.MEDIA_ROOT, "exports")
         os.makedirs(export_dir, exist_ok=True)
 
-        # Tạo tên file với timestamp
         timestamp = timezone.now().strftime("%Y%m%d_%H%M%S")
         filename = f"feedbacks_export_{timestamp}.csv"
         filepath = os.path.join(export_dir, filename)
-
-        # Log đường dẫn đầy đủ của file để debug
         logger.info(f"Exporting CSV to: {filepath}")
 
-        # Áp dụng các filter - Sử dụng select_related và prefetch_related để tối ưu query
         queryset = Feedback.objects.select_related(
             "user", "type", "priority", "status"
         ).prefetch_related("attachments")
@@ -130,11 +123,9 @@ def export_feedbacks_to_csv(
         queryset = apply_keyword_search(queryset, keyword)
         queryset = apply_sorting(queryset, sort)
 
-        # Đếm số lượng records để log và phản hồi người dùng
         count = queryset.count()
         logger.info(f"Exporting {count} feedback records")
 
-        # Tạo buffer để lưu dữ liệu CSV trong bộ nhớ
         csv_buffer = io.StringIO()
         fieldnames = [
             "Feedback ID",
@@ -152,13 +143,10 @@ def export_feedbacks_to_csv(
         writer = csv.DictWriter(csv_buffer, fieldnames=fieldnames)
         writer.writeheader()
 
-        # Khởi tạo mảng để lưu dữ liệu
         rows = []
 
-        # Xử lý từng feedback với chunk_size để tránh giữ tất cả dữ liệu trong bộ nhớ
         chunk_size = 100
         for feedback in queryset.iterator(chunk_size=chunk_size):
-            # Lấy attachments - lưu đường dẫn đầy đủ thay vì chỉ tên file
             attachments = ", ".join(
                 [
                     f"{settings.FRONTEND_URL}/media/{attachment.file_url}"
@@ -183,24 +171,19 @@ def export_feedbacks_to_csv(
             rows.append(row_data)
             writer.writerow(row_data)
 
-        # Tạo một ID duy nhất cho dữ liệu CSV
         csv_id = str(uuid.uuid4())
 
-        # Tạo tên file với timestamp
         timestamp = timezone.now().strftime("%Y%m%d_%H%M%S")
         filename = f"feedbacks_export_{timestamp}.csv"
 
-        # Lưu dữ liệu vào Redis với thời gian hết hạn là 1 giờ (3600 giây)
         cache_data = {
             "csv_data": csv_buffer.getvalue(),
             "filename": filename,
             "count": count,
-            "rows": rows,  # Bây giờ rows đã được định nghĩa
+            "rows": rows,
         }
 
-        # Lưu vào Redis với thời gian hết hạn là 1 giờ
         cache.set(f"csv_export:{csv_id}", json.dumps(cache_data), timeout=3600)
-
         logger.info(f"CSV data prepared and stored in Redis with ID: {csv_id}")
 
         return {

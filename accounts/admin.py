@@ -21,7 +21,6 @@ class UserAdmin(BaseUserAdmin):
                 )
             },
         ),
-        # ("OAuth", {"fields": ("oauth_provider", "oauth_uid")}),
         ("Other", {"fields": ("created_at",)}),
     )
     readonly_fields = ("created_at",)

@@ -14,7 +14,6 @@ from .serializers import (
 from .permissions import IsAdmin, IsUser, IsSelf, IsAdminOrSelf, IsAdminOrReadOnly
 from .utils import (
     handle_auth_response,
-    # handle_oauth_response,
     token_blacklisted,
     create_and_send_otp,
     get_otp_from_cache,
@@ -38,44 +37,6 @@ def login(request):
     pass
 
 
-@api_view(["GET", "PATCH"])
-@permission_classes([IsAuthenticated])
-def user_profile(request):
-    """Xem và cập nhật profile"""
-    user = request.user
-
-    if request.method == "GET":
-        serializer = UserSerializer(user)
-        return Response(serializer.data, status=status.HTTP_200_OK)
-
-    elif request.method == "PATCH":
-        serializer = ProfileUpdateSerializer(user, data=request.data, partial=True)
-        if serializer.is_valid():
-            serializer.save()
-            return Response(UserSerializer(user).data)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-
-# @api_view(["POST"])
-# @permission_classes([IsAuthenticated])
-# def change_password(request):
-#     """Thay đổi mật khẩu"""
-#     serializer = ChangePasswordSerializer(data=request.data)
-#     if serializer.is_valid():
-#         user = request.user
-#         if not user.check_password(serializer.validated_data["old_password"]):
-#             return Response(
-#                 {"old_password": ["Mật khẩu hiện tại không đúng"]},
-#                 status=status.HTTP_400_BAD_REQUEST,
-#             )
-
-#         user.set_password(serializer.validated_data["new_password"])
-#         user.save()
-#         return Response({"message": "Mật khẩu đã được thay đổi thành công"})
-
-#     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def logout(request):
@@ -91,7 +52,6 @@ def logout(request):
 @api_view(["POST"])
 @permission_classes([AllowAny])
 def send_verification_otp(request):
-    """Gửi OTP xác thực qua email"""
     email = request.data.get("email")
     if not email:
         return Response(
@@ -113,7 +73,6 @@ def send_verification_otp(request):
 @api_view(["POST"])
 @permission_classes([AllowAny])
 def verify_otp(request):
-    """Xác thực OTP"""
     email = request.data.get("email")
     otp = request.data.get("otp")
 
@@ -137,14 +96,10 @@ def verify_otp(request):
                 {"error": "Mã OTP không chính xác"}, status=status.HTTP_400_BAD_REQUEST
             )
 
-        # Kích hoạt tài khoản
         user.is_active = True
         user.save()
 
-        # Xóa OTP khỏi cache
         delete_otp_from_cache(email)
-
-        # Tạo token cho user
         tokens = get_tokens_for_user(user)
 
         return Response(
@@ -166,14 +121,6 @@ def verify_otp(request):
 @api_view(["POST"])
 @permission_classes([AllowAny])
 def google_login(request):
-    """
-    Google OAuth login
-
-    Expected payload:
-    {
-        "token": "google_id_token_from_frontend"
-    }
-    """
     token = request.data.get("token")
 
     if not token:
@@ -183,13 +130,8 @@ def google_login(request):
         )
 
     try:
-        # Authenticate user with Google
         user, created = GoogleAuthService.authenticate_google_user(token)
-
-        # Generate JWT tokens
         tokens = get_tokens_for_user(user)
-
-        # Prepare response
         response_data = {
             "access": tokens["access"],
             "refresh": tokens["refresh"],
@@ -218,7 +160,6 @@ def google_login(request):
 @api_view(["POST"])
 @permission_classes([AllowAny])
 def register_admin(request):
-    """Đăng ký tài khoản admin"""
     serializer = RegisterSerializer(data=request.data)
     if serializer.is_valid():
         validated_data = serializer.validated_data.copy()

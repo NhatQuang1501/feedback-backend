@@ -91,8 +91,6 @@ def get_tokens_for_user(user):
 def create_and_send_otp(user):
     otp = generate_otp()
     store_otp_in_cache(user.email, otp)
-
-    # Gửi email OTP qua Celery
     send_otp_email_task.delay(
         user.email, user.full_name, otp, settings.OTP_EXPIRY_TIME // 60
     )
@@ -116,16 +114,11 @@ def token_blacklisted(token):
 
 
 def handle_auth_response(serializer_class):
-    """
-    Decorator để xử lý response cho các view authentication
-    """
-
     def decorator(view_func):
         @wraps(view_func)
         def wrapper(request, *args, **kwargs):
             serializer = serializer_class(data=request.data)
             if serializer.is_valid():
-                # Lấy user từ serializer
                 if hasattr(serializer, "create") and "register" in view_func.__name__:
                     user = serializer.save()
                 else:
@@ -158,41 +151,3 @@ def handle_auth_response(serializer_class):
         return wrapper
 
     return decorator
-
-
-# def handle_oauth_response(provider_name):
-#     """
-#     Decorator để xử lý response cho các view OAuth
-#     """
-
-#     def decorator(view_func):
-#         @wraps(view_func)
-#         def wrapper(request, *args, **kwargs):
-#             token = request.data.get("token")
-#             if not token:
-#                 return Response(
-#                     {"error": "Token không được cung cấp"},
-#                     status=status.HTTP_400_BAD_REQUEST,
-#                 )
-
-#             try:
-#                 user = view_func(request, token, *args, **kwargs)
-#                 if isinstance(
-#                     user, Response
-#                 ):
-#                     return user
-
-#                 tokens = get_tokens_for_user(user)
-
-#                 return Response(
-#                     {
-#                         "refresh": tokens["refresh"],
-#                         "access": tokens["access"],
-#                         "user": UserSerializer(user).data,
-#                     }
-#                 )
-#             except Exception as e:
-#                 return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
-
-#         return wrapper
-#     return decorator

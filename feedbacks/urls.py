@@ -17,7 +17,7 @@ from .views import (
 urlpatterns = [
     path("feedbacks/", get_feedback_list, name="feedback_list"),
     path("feedbacks/create/", create_feedback, name="create_feedback"),
-    # Dashboard URLs
+    # Dashboard
     path(
         "feedbacks/dashboard/overview/",
         get_feedback_overview_stats,
@@ -35,7 +35,7 @@ urlpatterns = [
         name="priority_distribution",
     ),
     path("feedbacks/dashboard/handling-speed/", handling_speed, name="handling_speed"),
-    # Export URLs
+    # Export csv
     path("feedbacks/export/", export_feedbacks, name="export_feedbacks"),
     path(
         "feedbacks/export/<str:task_id>/status/",

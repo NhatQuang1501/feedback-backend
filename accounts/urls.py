@@ -5,23 +5,20 @@ from .views import (
     login,
     logout,
     register_admin,
-    user_profile,
     send_verification_otp,
     verify_otp,
     google_login,
 )
 
 urlpatterns = [
-    # Authentication endpoints
+    # Authentication
     path("register/", register, name="register"),
     path("login/", login, name="login"),
     path("token/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
     path("logout/", logout, name="logout"),
-    # OAuth endpoints
+    # OAuth
     path("login/google/", google_login, name="google_login"),
-    # User profile endpoints
-    path("profile/", user_profile, name="user_profile"),
-    # OTP verification endpoints
+    # OTP verification
     path(
         "send-verification-otp/",
         send_verification_otp,

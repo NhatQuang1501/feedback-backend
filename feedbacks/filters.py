@@ -3,11 +3,6 @@ from django.db.models.functions import Lower
 
 
 def get_multi_values(request, key):
-    """
-    Thu thập các query params có nhiều giá trị và chuẩn hóa CSV.
-    Hỗ trợ: key=a&key=b, key[]=a&key[]=b, và key=a,b
-    Trả về danh sách các chuỗi đã được cắt khoảng trắng và loại bỏ chuỗi rỗng.
-    """
     raw_values = []
     raw_values.extend(request.query_params.getlist(key))
     raw_values.extend(request.query_params.getlist(f"{key}[]"))
@@ -28,7 +23,6 @@ def get_multi_values(request, key):
 
 
 def apply_feedback_filters(queryset, status_values, type_values, priority_values):
-    """Áp dụng bộ lọc trạng thái/loại/độ ưu tiên khi có giá trị."""
     if status_values:
         queryset = queryset.filter(status__name__in=[v for v in status_values if v])
     if type_values:
@@ -39,10 +33,6 @@ def apply_feedback_filters(queryset, status_values, type_values, priority_values
 
 
 def apply_keyword_search(queryset, keyword):
-    """Search behavior:
-    - ASCII (không dấu): unaccent + lower contains
-    - Có dấu: icontains (case-insensitive exact substring)
-    """
     if not keyword:
         return queryset
 

@@ -44,7 +44,6 @@ class CustomPagination(PageNumberPagination):
 
 
 def send_feedback_emails(feedback):
-    """Gửi email xác nhận và thông báo cho admin khi có feedback mới."""
     send_feedback_confirmation_email.delay(
         str(feedback.feedback_id),
         feedback.user.email,
@@ -63,7 +62,6 @@ def send_feedback_emails(feedback):
 
 
 def notify_status_change(feedback, old_status):
-    """Thông báo khi trạng thái feedback thay đổi và trả về tên trạng thái hiển thị."""
     if feedback.status.name != old_status:
         send_feedback_status_update_email.delay(
             str(feedback.feedback_id),
@@ -104,10 +102,6 @@ def validate_file(file):
 
 
 def handle_feedback_response(serializer_class):
-    """
-    Decorator để xử lý response cho các view feedback, validate dữ liệu,
-    lưu feedback và gửi email thông báo.
-    """
 
     def decorator(view_func):
         @wraps(view_func)
@@ -223,13 +217,8 @@ def get_monthly_feedback_counts(
 
 
 def get_feedback_type_counts(from_param: str | None, to_param: str | None):
-    """Return counts for each feedback type in the given date range.
-
-    Always returns all defined types with zero fill when absent.
-    """
     from_date, to_date = resolve_date_range(from_param, to_param, default_months_back=5)
 
-    # Aggregate
     qs = (
         Feedback.objects.filter(
             created_at__date__gte=from_date,
@@ -241,7 +230,6 @@ def get_feedback_type_counts(from_param: str | None, to_param: str | None):
 
     raw_map = {row["type__name"]: row["count"] for row in qs}
 
-    # Ensure stable order and zero fill for all defined types
     ordered_types = FeedbackTypeChoices.get_values()
     result = [
         {
@@ -256,10 +244,6 @@ def get_feedback_type_counts(from_param: str | None, to_param: str | None):
 
 
 def get_priority_distribution_counts(from_param: str | None, to_param: str | None):
-    """Return counts for each priority in the given date range.
-
-    Always returns all defined priorities with zero fill when absent.
-    """
     from_date, to_date = resolve_date_range(from_param, to_param, default_months_back=5)
 
     qs = (
@@ -289,11 +273,6 @@ def get_priority_distribution_counts(from_param: str | None, to_param: str | Non
 def get_handling_speed_by_month(
     from_param: str | None, to_param: str | None, order: str = "desc"
 ):
-    """Average handling speed (days) per month, computed for resolved feedbacks.
-
-    Uses resolution month (updated_at) and duration = updated_at - created_at.
-    Returns zero for months without resolved feedbacks.
-    """
     from_date, to_date = resolve_date_range(
         from_param,
         to_param,

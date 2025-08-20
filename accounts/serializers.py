@@ -41,7 +41,6 @@ class RegisterSerializer(serializers.ModelSerializer):
         validated_data.pop("password2")
         role_id = validated_data.pop("role_id", None)
 
-        # Default role is 'user' if no role_id
         if role_id:
             try:
                 role = Role.objects.get(role_id=role_id)
@@ -90,16 +89,3 @@ class ProfileUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = ["full_name"]
-
-
-# class ChangePasswordSerializer(serializers.Serializer):
-#     old_password = serializers.CharField(required=True)
-#     new_password = serializers.CharField(required=True, validators=[validate_password])
-#     confirm_password = serializers.CharField(required=True)
-
-#     def validate(self, attrs):
-#         if attrs["new_password"] != attrs["confirm_password"]:
-#             raise serializers.ValidationError(
-#                 {"new_password": "Mật khẩu mới không khớp"}
-#             )
-#         return attrs
