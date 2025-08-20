@@ -8,6 +8,7 @@ from .views import (
     send_verification_otp,
     verify_otp,
     google_login,
+    get_profile,
 )
 
 urlpatterns = [
@@ -16,6 +17,8 @@ urlpatterns = [
     path("login/", login, name="login"),
     path("token/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
     path("logout/", logout, name="logout"),
+    # Profile
+    path("profile/", get_profile, name="get_profile"),
     # OAuth
     path("login/google/", google_login, name="google_login"),
     # OTP verification
