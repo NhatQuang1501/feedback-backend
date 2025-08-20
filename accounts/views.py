@@ -187,3 +187,40 @@ def register_admin(request):
         )
 
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def get_profile(request):
+    """
+    API để lấy thông tin profile của user hiện tại
+    
+    Mục đích:
+    - Xác thực và lấy thông tin user sau khi đăng nhập
+    - Khôi phục session khi user refresh trang/mở lại app
+    - Kiểm tra quyền hạn (role: admin/user)
+    - Hiển thị thông tin cá nhân trong UI
+    """
+    try:
+        user = request.user
+        serializer = UserSerializer(user)
+        
+        return Response({
+            "success": True,
+            "message": "Lấy thông tin profile thành công",
+            "data": {
+                "user": serializer.data,
+                "permissions": {
+                    "is_admin": user.role.name == "admin" if user.role else False,
+                    "is_staff": user.is_staff,
+                    "is_active": user.is_active,
+                }
+            }
+        }, status=status.HTTP_200_OK)
+        
+    except Exception as e:
+        return Response({
+            "success": False,
+            "error": "Không thể lấy thông tin profile",
+            "details": str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
