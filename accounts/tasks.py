@@ -47,7 +47,11 @@ def send_otp_email_task(email, full_name, otp, expiry_minutes):
         logger.info(f"OTP email sent successfully to {email}")
         return True
     except Exception as e:
+        # Log the full exception details
+        import traceback
+
         logger.error(f"Failed to send OTP email to {email}: {str(e)}")
+        logger.error(traceback.format_exc())
         return False
 
 

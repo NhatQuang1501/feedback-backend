@@ -274,7 +274,6 @@ def handling_speed(request):
 def export_feedbacks(request):
     """Khởi tạo tác vụ xuất danh sách phản hồi ra file CSV."""
     try:
-        # filter parameters
         status_values = request.data.get("status", [])
         type_values = request.data.get("type", [])
         priority_values = request.data.get("priority", [])
