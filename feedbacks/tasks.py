@@ -8,6 +8,7 @@ from django.core.mail import EmailMultiAlternatives
 from django.conf import settings
 from django.utils import timezone
 from django.core.cache import cache
+import os
 
 from .models import EmailLog, Feedback, Attachment
 from .choices import StatusChoices
@@ -103,11 +104,16 @@ def export_feedbacks_to_csv(
     priority_values=None,
     keyword=None,
     sort="newest",
-    user_email=None,
 ):
-    """Tạo dữ liệu CSV trong bộ nhớ và lưu vào Redis."""
     try:
-        # Apply filters
+        export_dir = os.path.join(settings.MEDIA_ROOT, "exports")
+        os.makedirs(export_dir, exist_ok=True)
+
+        timestamp = timezone.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"feedbacks_export_{timestamp}.csv"
+        filepath = os.path.join(export_dir, filename)
+        logger.info(f"Exporting CSV to: {filepath}")
+
         queryset = Feedback.objects.select_related(
             "user", "type", "priority", "status"
         ).prefetch_related("attachments")
@@ -117,11 +123,9 @@ def export_feedbacks_to_csv(
         queryset = apply_keyword_search(queryset, keyword)
         queryset = apply_sorting(queryset, sort)
 
-        # Count feedbacks
         count = queryset.count()
-        logger.info(f"Preparing CSV data for {count} feedback records")
+        logger.info(f"Exporting {count} feedback records")
 
-        # Create CSV buffer
         csv_buffer = io.StringIO()
         fieldnames = [
             "Feedback ID",
@@ -139,30 +143,33 @@ def export_feedbacks_to_csv(
         writer = csv.DictWriter(csv_buffer, fieldnames=fieldnames)
         writer.writeheader()
 
-        chunk_size = 100
         rows = []
 
+        chunk_size = 100
         for feedback in queryset.iterator(chunk_size=chunk_size):
             attachments = ", ".join(
-                [attachment.file_name for attachment in feedback.attachments.all()]
+                [
+                    f"{settings.FRONTEND_URL}/media/{attachment.file_url}"
+                    for attachment in feedback.attachments.all()
+                ]
             )
 
-            rows.append(
-                {
-                    "Feedback ID": str(feedback.feedback_id),
-                    "Tiêu đề": feedback.title,
-                    "Nội dung": feedback.content,
-                    "Loại phản hồi": str(feedback.type),
-                    "Mức độ ưu tiên": str(feedback.priority),
-                    "Trạng thái": str(feedback.status),
-                    "Người gửi": feedback.user.full_name,
-                    "Email": feedback.user.email,
-                    "Ngày tạo": feedback.created_at.strftime("%Y-%m-%d %H:%M:%S"),
-                    "Ngày cập nhật": feedback.updated_at.strftime("%Y-%m-%d %H:%M:%S"),
-                    "File đính kèm": attachments,
-                }
-            )
-            writer.writerow(rows[-1])
+            row_data = {
+                "Feedback ID": str(feedback.feedback_id),
+                "Tiêu đề": feedback.title,
+                "Nội dung": feedback.content,
+                "Loại phản hồi": str(feedback.type),
+                "Mức độ ưu tiên": str(feedback.priority),
+                "Trạng thái": str(feedback.status),
+                "Người gửi": feedback.user.full_name,
+                "Email": feedback.user.email,
+                "Ngày tạo": feedback.created_at.strftime("%Y-%m-%d %H:%M:%S"),
+                "Ngày cập nhật": feedback.updated_at.strftime("%Y-%m-%d %H:%M:%S"),
+                "File đính kèm": attachments,
+            }
+
+            rows.append(row_data)
+            writer.writerow(row_data)
 
         csv_id = str(uuid.uuid4())
 
@@ -176,8 +183,7 @@ def export_feedbacks_to_csv(
             "rows": rows,
         }
 
-        cache.set(f"csv_export:{csv_id}", json.dumps(cache_data), timeout=1800)
-
+        cache.set(f"csv_export:{csv_id}", json.dumps(cache_data), timeout=3600)
         logger.info(f"CSV data prepared and stored in Redis with ID: {csv_id}")
 
         return {
